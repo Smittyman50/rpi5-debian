@@ -36,7 +36,20 @@ jobs:
           }
           pip3 install --break-system-packages pyyaml jinja2
 
+      - name: Try to reuse existing Pi firmware bundle
+        run: |
+          set -euo pipefail
+          mkdir -p out/artifacts
+          FW_URL="http://192.168.3.26/rpi/httpboot/artifacts/pi-firmware.tar.zst"
+          if curl -fsI "$FW_URL" >/dev/null; then
+            curl -fsSL "$FW_URL" -o out/artifacts/pi-firmware.tar.zst
+            echo "FW_REUSED=1" >> "$GITHUB_ENV"
+          else
+            echo "FW_REUSED=0" >> "$GITHUB_ENV"
+          fi
+
       - name: Fetch Raspberry Pi firmware/kernel
+        if: env.FW_REUSED != '1'
         run: |
           chmod +x scripts/fetch_rpi_firmware.sh
           scripts/fetch_rpi_firmware.sh
@@ -63,7 +76,24 @@ jobs:
           chmod +x scripts/build_rootfs.sh
           scripts/build_rootfs.sh
 
+      - name: Try to reuse existing installer initramfs artifact
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          INITRD_URL="http://192.168.3.26/rpi/httpboot/artifacts/initramfs.gz"
+
+          if curl -fsI "$INITRD_URL" >/dev/null; then
+            echo "Found existing initramfs.gz on Ironhide; downloading..."
+            curl -fsSL "$INITRD_URL" -o out/initramfs.gz
+            ls -lh out/initramfs.gz
+            echo "INITRD_REUSED=1" >> "$GITHUB_ENV"
+          else
+            echo "No initramfs.gz found on Ironhide; will build..."
+            echo "INITRD_REUSED=0" >> "$GITHUB_ENV"
+          fi
+
       - name: Build installer initramfs.gz (Debian mini-initramfs)
+        if: env.INITRD_REUSED != '1'
         env:
           HTTP_BASE: http://192.168.3.26/rpi/httpboot
         run: |
