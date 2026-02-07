@@ -69,19 +69,25 @@ jobs:
           scripts/publish.sh
 
       - name: Sign boot.img -> boot.sig
-        env:
-          HTTPBOOT_PRIVATE_KEY: ${{ secrets.HTTPBOOT_PRIVATE_KEY }}
         run: |
           set -euo pipefail
 
-          # If you already have rpi_httpboot_private.pem in the repo, remove this block
-          test -n "${HTTPBOOT_PRIVATE_KEY}"
-          echo "${HTTPBOOT_PRIVATE_KEY}" > rpi_httpboot_private.pem
+          echo "== verify inputs =="
+          ls -la dist || true
+          test -f dist/boot.img || { echo "Missing dist/boot.img"; exit 1; }
+
+          echo "== verify signer =="
+          command -v rpi-eeprom-digest >/dev/null 2>&1 || {
+            echo "Missing rpi-eeprom-digest in PATH"
+            echo "Try: apt-get install -y rpi-eeprom (or ensure it's installed on runner)"
+            exit 1
+          }
+
+          echo "== verify key =="
+          test -f rpi_httpboot_private.pem || { echo "Missing rpi_httpboot_private.pem"; exit 1; }
           chmod 600 rpi_httpboot_private.pem
 
-          test -f rpi_httpboot_private.pem
-          command -v rpi-eeprom-digest >/dev/null 2>&1
-
+          echo "== sign =="
           rpi-eeprom-digest -i dist/boot.img -o dist/boot.sig -k rpi_httpboot_private.pem
           ls -lh dist/boot.img dist/boot.sig
           sha256sum dist/boot.sig
