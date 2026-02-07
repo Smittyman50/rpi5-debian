@@ -1,0 +1,24 @@
+#cloud-config
+users:
+  - name: {{ username }}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [sudo]
+    shell: /bin/bash
+    ssh_authorized_keys:
+{% for k in ssh_authorized_keys %}
+      - {{ k }}
+{% endfor %}
+ssh_pwauth: false
+disable_root: true
+
+package_update: true
+packages:
+{% for p in packages %}
+  - {{ p }}
+{% endfor %}
+
+timezone: {{ timezone | default("UTC") }}
+
+runcmd:
+  - [ bash, -lc, "systemctl enable ssh || true" ]
+  - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]

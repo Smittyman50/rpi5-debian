@@ -1,0 +1,99 @@
+name: pi5-debian-netinstall
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [linux, host, docker]
+    env:
+      IRONHIDE_SSH_HOST: "ironhide.home.arpa"
+      IRONHIDE_SSH_USER: "deployer"
+      IRONHIDE_HTTPBOOT_DIR: "/srv/http/rpi/httpboot"
+    steps:
+      - name: Checkout
+        env:
+          GITEA_REPO_TOKEN: ${{ secrets.GITEA_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf ./* ./.git || true
+          git clone "http://gitgard.home.arpa:3000/smittyman/rpi5-debian.git" .
+          git fetch --all --tags --prune
+          SHA="${GITHUB_SHA:-${GITEA_SHA:-}}"
+          if [ -n "${SHA:-}" ]; then git checkout -f "${SHA}"; fi
+          git rev-parse --short HEAD
+
+      - name: Install deps
+        run: |
+          apt-get update
+          apt-get install -y git python3 python3-pip rsync zstd cpio dosfstools mtools parted wget
+          apt-get install -y rpi-eeprom || true
+          command -v rpi-eeprom-digest >/dev/null 2>&1 || {
+            echo "ERROR: rpi-eeprom-digest not found. Install rpi-eeprom (or ensure it's present on the runner)."
+            exit 1
+          }
+          pip3 install --break-system-packages pyyaml jinja2
+
+      - name: Fetch Raspberry Pi firmware/kernel
+        run: |
+          chmod +x scripts/fetch_rpi_firmware.sh
+          scripts/fetch_rpi_firmware.sh
+
+      - name: Build Debian rootfs (arm64)
+        run: |
+          chmod +x scripts/build_rootfs.sh
+          scripts/build_rootfs.sh
+
+      - name: Build initramfs.gz
+        env:
+          HTTP_BASE: http://10.0.10.10/pi5
+        run: |
+          chmod +x scripts/build_initramfs.sh
+          scripts/build_initramfs.sh
+
+      - name: Build boot.img for EEPROM HTTP boot
+        run: |
+          chmod +x scripts/build_boot_img.sh
+          scripts/build_boot_img.sh
+
+      - name: Render per-Pi cloud-init seeds
+        run: |
+          chmod +x scripts/render_seeds.py
+          scripts/render_seeds.py
+
+      - name: Stage publish payload (dist/)
+        run: |
+          chmod +x scripts/publish.sh
+          scripts/publish.sh
+
+      - name: Sign boot.img -> boot.sig
+        env:
+          HTTPBOOT_PRIVATE_KEY: ${{ secrets.HTTPBOOT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          # If you already have rpi_httpboot_private.pem in the repo, remove this block
+          test -n "${HTTPBOOT_PRIVATE_KEY}"
+          echo "${HTTPBOOT_PRIVATE_KEY}" > rpi_httpboot_private.pem
+          chmod 600 rpi_httpboot_private.pem
+
+          test -f rpi_httpboot_private.pem
+          command -v rpi-eeprom-digest >/dev/null 2>&1
+
+          rpi-eeprom-digest -i dist/boot.img -o dist/boot.sig -k rpi_httpboot_private.pem
+          ls -lh dist/boot.img dist/boot.sig
+          sha256sum dist/boot.sig
+
+      - name: Deploy dist/ to ironhide
+        env:
+          ANSIBLE_PRIVATE_KEY: ${{ secrets.ANSIBLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          echo "$ANSIBLE_PRIVATE_KEY" > /tmp/ironhide.key
+          chmod 600 /tmp/ironhide.key
+
+          rsync -avz --delete -e "ssh -i /tmp/ironhide.key -o StrictHostKeyChecking=no" \
+            dist/ \
+            "${IRONHIDE_SSH_USER}@${IRONHIDE_SSH_HOST}:${IRONHIDE_HTTPBOOT_DIR}/"
