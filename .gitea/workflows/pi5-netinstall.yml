@@ -41,7 +41,7 @@ jobs:
           chmod +x scripts/fetch_rpi_firmware.sh
           scripts/fetch_rpi_firmware.sh
 
-                - name: Try to reuse existing Debian rootfs artifact
+      - name: Try to reuse existing Debian rootfs artifact
         run: |
           set -euo pipefail
           mkdir -p out/artifacts
