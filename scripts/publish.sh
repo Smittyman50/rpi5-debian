@@ -28,9 +28,27 @@ cp -f boot/cmdline.txt dist/cmdline.txt
 # Debian rootfs artifact
 cp -f out/artifacts/debian-bookworm-arm64-rootfs.tar.zst dist/artifacts/
 
-# Bundle firmware for NVMe /boot/firmware install
-tar -C out/rpi-firmware/boot -cpf - \
-  start*.elf fixup*.dat overlays bcm2712-*.dtb kernel_2712.img \
+# Bundle firmware for NVMe /boot/firmware install (explicit file list)
+FW_BOOT="out/rpi-firmware/boot"
+test -d "$FW_BOOT" || { echo "Missing $FW_BOOT"; exit 1; }
+
+# Required Pi 5 firmware/kernel payloads
+REQ_FILES=(
+  "start4.elf"
+  "fixup4.dat"
+  "kernel_2712.img"
+  "bcm2712-rpi-5-b.dtb"
+)
+
+for f in "${REQ_FILES[@]}"; do
+  test -f "${FW_BOOT}/${f}" || { echo "Missing firmware file: ${FW_BOOT}/${f}"; ls -la "$FW_BOOT" | head -50; exit 1; }
+done
+
+test -d "${FW_BOOT}/overlays" || { echo "Missing overlays dir"; ls -la "$FW_BOOT" | head -50; exit 1; }
+
+# Create bundle
+tar -C "$FW_BOOT" -cpf - \
+  start4.elf fixup4.dat kernel_2712.img bcm2712-rpi-5-b.dtb overlays \
   | zstd -19 -T0 -o dist/artifacts/pi-firmware.tar.zst
 
 # Per-Pi seeds
