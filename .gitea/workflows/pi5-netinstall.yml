@@ -68,6 +68,15 @@ jobs:
           chmod +x scripts/publish.sh
           scripts/publish.sh
 
+      - name: Materialize signing key
+        env:
+          RPI_HTTPBOOT_PRIVATE_PEM: ${{ secrets.RPI_HTTPBOOT_PRIVATE_PEM }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${RPI_HTTPBOOT_PRIVATE_PEM}"
+          printf "%s" "$RPI_HTTPBOOT_PRIVATE_PEM" > rpi_httpboot_private.pem
+
       - name: Sign boot.img -> boot.sig
         run: |
           set -euo pipefail
