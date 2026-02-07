@@ -46,12 +46,12 @@ jobs:
           chmod +x scripts/build_rootfs.sh
           scripts/build_rootfs.sh
 
-      - name: Build initramfs.gz
+      - name: Build installer initramfs.gz (Debian mini-initramfs)
         env:
-          HTTP_BASE: http://10.0.10.10/pi5
+          HTTP_BASE: http://192.168.3.26/rpi/httpboot
         run: |
-          chmod +x scripts/build_initramfs.sh
-          scripts/build_initramfs.sh
+          chmod +x scripts/build_installer_initramfs.sh
+          scripts/build_installer_initramfs.sh
 
       - name: Build boot.img for EEPROM HTTP boot
         run: |

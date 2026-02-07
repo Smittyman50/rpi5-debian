@@ -1,7 +1,5 @@
-#!/bin/busybox sh
+#!/bin/sh
 set -eu
-
-PATH=/bin:/sbin
 
 log(){ echo "[init] $*"; echo "<6>[init] $*" > /dev/kmsg 2>/dev/null || true; }
 die(){ log "FATAL: $*"; exec sh; }
@@ -11,31 +9,30 @@ mount -t sysfs sys  /sys  2>/dev/null || true
 mount -t devtmpfs dev /dev 2>/dev/null || true
 mkdir -p /run /tmp /mnt/root
 
-# Network
 log "DHCP on eth0..."
 ip link set eth0 up 2>/dev/null || true
-udhcpc -i eth0 -q -t 10 -T 3 || die "DHCP failed"
+dhclient -4 -v eth0 || die "DHCP failed"
 
 SERIAL="$(awk '/^Serial/ {print $3}' /proc/cpuinfo | tail -n1)"
 [ -n "$SERIAL" ] || die "No Serial found"
 log "Serial: $SERIAL"
 
-# Baked in by CI at build time
-HTTP_BASE="${HTTP_BASE:-http://10.0.10.10/pi5}"
+HTTP_BASE="http://192.168.3.26/rpi/httpboot"   # replaced by CI via sed
 ART="$HTTP_BASE/artifacts"
 SEED="$HTTP_BASE/seeds/$SERIAL"
 
-fetch() { wget -qO "$2" "$1" || die "Fetch failed: $1"; }
+fetch() {
+  url="$1"; out="$2"
+  curl -fsSL "$url" -o "$out" || wget -qO "$out" "$url" || die "Fetch failed: $url"
+}
 
-# Wait for NVMe
-log "Waiting for /dev/nvme0n1..."
+log "Waiting for NVMe..."
 i=0
 while [ ! -b /dev/nvme0n1 ]; do
   i=$((i+1)); [ $i -gt 200 ] && die "NVMe not found"
   sleep 0.1
 done
 
-# Partition + format
 log "Partitioning NVMe..."
 parted -s /dev/nvme0n1 mklabel gpt
 parted -s /dev/nvme0n1 mkpart boot fat32 1MiB 512MiB
@@ -51,31 +48,26 @@ mount /dev/nvme0n1p2 /mnt/root
 mkdir -p /mnt/root/boot/firmware
 mount /dev/nvme0n1p1 /mnt/root/boot/firmware
 
-# Rootfs
-log "Fetching rootfs..."
+log "Fetching Debian rootfs..."
 fetch "$ART/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
 log "Extracting rootfs..."
 unzstd -c /tmp/rootfs.tar.zst | tar -xpf - -C /mnt/root
 
-# Firmware bundle to /boot/firmware on NVMe
-log "Fetching pi firmware bundle..."
+log "Fetching Pi firmware bundle..."
 fetch "$ART/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
-log "Installing firmware to NVMe boot partition..."
+log "Installing firmware..."
 unzstd -c /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware
 
-# Per-Pi seed -> local NoCloud
-log "Fetching per-Pi seed..."
+log "Fetching per-Pi cloud-init seed..."
 mkdir -p /mnt/root/boot/firmware/seed
 fetch "$SEED/meta-data" /mnt/root/boot/firmware/seed/meta-data
 fetch "$SEED/user-data" /mnt/root/boot/firmware/seed/user-data
 
-# NVMe cmdline
 log "Writing NVMe cmdline..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
 console=ttyAMA10,115200 console=tty1 root=/dev/nvme0n1p2 rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud;s=/boot/firmware/seed/
 EOF
 
-# fstab
 log "Writing fstab..."
 cat > /mnt/root/etc/fstab <<EOF
 LABEL=rootfs  /              ext4  defaults,noatime  0  1
@@ -86,5 +78,5 @@ sync
 umount /mnt/root/boot/firmware || true
 umount /mnt/root || true
 
-log "Done. Rebooting..."
+log "Install complete; rebooting..."
 reboot -f
