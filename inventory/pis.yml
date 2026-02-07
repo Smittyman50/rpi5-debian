@@ -1,8 +1,10 @@
 pis:
-  "c30fa742":
-    hostname: "smitty-pi5-01"
-    username: "mike"
+  "bf751bd2c30fa742":
+    hostname: "testpi"
+    username: "smittyman"
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAA... mike@laptop"
-    packages: [htop, vim]
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINXdpbaJuNTaMFItt4F2FYW0eD3HQ1yw864KlNLK83AN 1973m@Computron"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKqYo8kJuQDH1CWZ+gUbVA6Dl8rH/D1lEdggE8deaGIk smittyman@home.arpa"
+    packages: [ca-certificates, curl, vim, git, python3, duf, unattended-upgrades]
     timezone: "America/New_York"
+    docker: true

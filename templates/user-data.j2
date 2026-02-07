@@ -2,23 +2,43 @@
 users:
   - name: {{ username }}
     sudo: ALL=(ALL) NOPASSWD:ALL
-    groups: [sudo]
+    groups: [sudo{% if docker | default(false) %}, docker{% endif %}]
     shell: /bin/bash
     ssh_authorized_keys:
 {% for k in ssh_authorized_keys %}
       - {{ k }}
 {% endfor %}
+
 ssh_pwauth: false
 disable_root: true
 
 package_update: true
+
 packages:
+  - openssh-server
 {% for p in packages %}
   - {{ p }}
 {% endfor %}
+{% if docker | default(false) %}
+  - ca-certificates
+  - curl
+  - gnupg
+{% endif %}
 
 timezone: {{ timezone | default("UTC") }}
 
 runcmd:
-  - [ bash, -lc, "systemctl enable ssh || true" ]
+  - [ bash, -lc, "systemctl enable --now ssh || true" ]
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
+
+{% if docker | default(false) %}
+  # Docker (only when docker:true)
+  - [ bash, -lc, "install -m 0755 -d /etc/apt/keyrings" ]
+  - [ bash, -lc, "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg" ]
+  - [ bash, -lc, "chmod a+r /etc/apt/keyrings/docker.gpg" ]
+  - [ bash, -lc, "echo 'deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable' > /etc/apt/sources.list.d/docker.list" ]
+  - [ bash, -lc, "apt-get update" ]
+  - [ bash, -lc, "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ]
+  - [ bash, -lc, "systemctl enable --now docker" ]
+  - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
+{% endif %}
