@@ -1,0 +1,8 @@
+pis:
+  "c30fa742":
+    hostname: "smitty-pi5-01"
+    username: "mike"
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAA... mike@laptop"
+    packages: [htop, vim]
+    timezone: "America/New_York"
