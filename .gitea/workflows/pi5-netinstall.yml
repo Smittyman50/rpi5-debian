@@ -108,13 +108,13 @@ jobs:
       - name: Try to reuse existing installer initramfs artifact
         run: |
           set -euo pipefail
-          mkdir -p out
+          mkdir -p out/artifacts
           INITRD_URL="http://192.168.3.26/rpi/httpboot/artifacts/initramfs.gz"
 
           if curl -fsI "$INITRD_URL" >/dev/null; then
             echo "Found existing initramfs.gz on Ironhide; downloading..."
-            curl -fsSL "$INITRD_URL" -o out/initramfs.gz
-            ls -lh out/initramfs.gz
+            curl -fsSL "$INITRD_URL" -o out/artifacts/initramfs.gz
+            ls -lh out/artifacts/initramfs.gz
             echo "INITRD_REUSED=1" >> "$GITHUB_ENV"
           else
             echo "No initramfs.gz found on Ironhide; will build..."
