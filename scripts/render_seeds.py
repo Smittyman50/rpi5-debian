@@ -10,8 +10,6 @@ OUT_BASE = "out/seeds"
 env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
     autoescape=False,
-    trim_blocks=True,     # helps remove extra newlines around block tags
-    lstrip_blocks=True,   # strips leading spaces before block tags
     undefined=StrictUndefined,  # fail fast if a variable is missing/misspelled
 )
 
