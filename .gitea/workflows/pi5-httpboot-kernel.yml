@@ -91,20 +91,43 @@ jobs:
           install -m 0755 /tmp/mc /usr/local/bin/mc
           mc --version
 
-      - name: Publish dist/ to MinIO (latest + build-id folder)
-        env:
-          MINIO_ENDPOINT: "http://reboot.home.arpa:9000"
-          MINIO_BUCKET: "rpi-artifacts"
-          MINIO_PREFIX: "httpboot-kernel"
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_RPI_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_RPI_SECRET_KEY }}
-        run: |
-          set -euo pipefail
-          export MC_CONFIG_DIR="$PWD/.mc"
-          rm -rf "$MC_CONFIG_DIR"
+- name: Publish dist/ to MinIO (latest + build-id folder)
+  env:
+    MINIO_ENDPOINT: "http://reboot.home.arpa:9000"
+    MINIO_BUCKET: "rpi-artifacts"
+    MINIO_PREFIX: "httpboot-kernel"
+    MINIO_ACCESS_KEY: ${{ secrets.MINIO_RPI_ACCESS_KEY }}
+    MINIO_SECRET_KEY: ${{ secrets.MINIO_RPI_SECRET_KEY }}
+  run: |
+    set -euo pipefail
 
-          mc alias set reboot "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
-          mc ls "reboot/$MINIO_BUCKET" >/dev/null
+    export MC_CONFIG_DIR="$PWD/.mc"
+    rm -rf "$MC_CONFIG_DIR"
 
-          SHORT_SHA="$(git rev-parse --short HEAD)"
-          BU
+    mc alias set reboot "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+    mc ls "reboot/$MINIO_BUCKET" >/dev/null
+
+    SHORT_SHA="$(git rev-parse --short HEAD)"
+    BUILD_TS="$(date -u +%Y%m%d-%H%M%S)"
+    BUILD_ID="${BUILD_TS}-${SHORT_SHA}"
+
+    # latest/ (stable URLs)
+    mc mirror --overwrite --remove \
+      dist/ \
+      "reboot/$MINIO_BUCKET/$MINIO_PREFIX/latest/"
+
+    # immutable build folder
+    mc mirror --overwrite \
+      dist/ \
+      "reboot/$MINIO_BUCKET/$MINIO_PREFIX/$BUILD_ID/"
+
+    cat > out/latest.json <<EOF
+    {
+      "build_id": "$BUILD_ID",
+      "bucket": "$MINIO_BUCKET",
+      "prefix": "$MINIO_PREFIX",
+      "latest_root": "$MINIO_PREFIX/latest/",
+      "build_root": "$MINIO_PREFIX/$BUILD_ID/"
+    }
+    EOF
+    mc cp out/latest.json "reboot/$MINIO_BUCKET/$MINIO_PREFIX/latest.json"
