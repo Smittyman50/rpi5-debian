@@ -67,6 +67,25 @@ jobs:
             unzstd -c out/artifacts/pi-firmware.tar.zst | tar -xpf - -C out/rpi-firmware
           fi
 
+          # After extracting to out/rpi-firmware...
+          if [ -f out/rpi-firmware/start4.elf ] && [ ! -f out/rpi-firmware/boot/start4.elf ]; then
+            mkdir -p out/rpi-firmware/boot
+
+            # Move everything that should live in /boot/firmware into the boot/ directory
+            shopt -s dotglob nullglob
+            for p in out/rpi-firmware/*; do
+              b="$(basename "$p")"
+              [ "$b" = "boot" ] && continue
+              mv "$p" out/rpi-firmware/boot/
+            done
+          fi
+
+          test -f out/rpi-firmware/boot/start4.elf || {
+            echo "FATAL: start4.elf still not found after normalization."
+            find out/rpi-firmware -maxdepth 2 -type f | head -200
+            exit 1
+          }
+
           # Validate expected files
           if [ ! -f out/rpi-firmware/boot/start4.elf ]; then
             echo "FATAL: start4.elf still not found after extraction."
