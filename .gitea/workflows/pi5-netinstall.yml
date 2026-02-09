@@ -48,6 +48,35 @@ jobs:
             echo "FW_REUSED=0" >> "$GITHUB_ENV"
           fi
 
+      - name: Materialize firmware tree from bundle (if present)
+        run: |
+          set -euo pipefail
+
+          # This is where build_boot_img.sh expects firmware
+          mkdir -p out/rpi-firmware
+
+          # If firmware already exists (because fetch_rpi_firmware.sh ran), do nothing
+          if [ -f out/rpi-firmware/boot/start4.elf ]; then
+            echo "Firmware tree already present (out/rpi-firmware/boot/start4.elf)."
+            exit 0
+          fi
+
+          # If we downloaded the bundle, extract it
+          if [ -f out/artifacts/pi-firmware.tar.zst ]; then
+            echo "Extracting out/artifacts/pi-firmware.tar.zst -> out/rpi-firmware"
+            unzstd -c out/artifacts/pi-firmware.tar.zst | tar -xpf - -C out/rpi-firmware
+          fi
+
+          # Validate expected files
+          if [ ! -f out/rpi-firmware/boot/start4.elf ]; then
+            echo "FATAL: start4.elf still not found after extraction."
+            echo "Top-level listing:"
+            find out/rpi-firmware -maxdepth 3 -type f | head -100 || true
+            echo "Archive listing (first 200 entries):"
+            unzstd -c out/artifacts/pi-firmware.tar.zst | tar -tf - | head -200 || true
+            exit 1
+          fi
+
       - name: Fetch Raspberry Pi firmware/kernel
         if: env.FW_REUSED != '1'
         run: |
