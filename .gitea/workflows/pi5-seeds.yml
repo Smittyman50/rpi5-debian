@@ -8,6 +8,7 @@ on:
       - "templates/**"
       - "scripts/render_seeds.py"
       - "scripts/publish.sh"
+      - ".gitea/workflows/pi5-seeds.yml"
   workflow_dispatch:
 
 jobs:
