@@ -21,8 +21,6 @@ packages:
   - {{ p }}
 {% endfor %}
 {% if docker | default(false) %}
-  - ca-certificates
-  - curl
   - gnupg
 {% endif %}
 
