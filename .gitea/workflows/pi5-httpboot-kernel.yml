@@ -84,17 +84,27 @@ jobs:
           test -f dist/boot.img || { echo "Missing dist/boot.img"; exit 1; }
           rpi-eeprom-digest -i dist/boot.img -o dist/boot.sig -k rpi_httpboot_private.pem
 
-      - name: Deploy dist/ to ironhide (boot artifacts; preserve seeds/)
-        env:
-          ANSIBLE_PRIVATE_KEY: ${{ secrets.ANSIBLE_PRIVATE_KEY }}
+      - name: Install MinIO client (mc)
         run: |
           set -euo pipefail
-          echo "$ANSIBLE_PRIVATE_KEY" > /tmp/ironhide.key
-          chmod 600 /tmp/ironhide.key
+          curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /tmp/mc
+          install -m 0755 /tmp/mc /usr/local/bin/mc
+          mc --version
 
-          rsync -avz --delete \
-            --exclude 'seeds/' \
-            --filter 'protect seeds/***' \
-            -e "ssh -i /tmp/ironhide.key -o StrictHostKeyChecking=no" \
-            dist/ \
-            "${IRONHIDE_SSH_USER}@${IRONHIDE_SSH_HOST}:${IRONHIDE_HTTPBOOT_DIR}/"
+      - name: Publish dist/ to MinIO (latest + build-id folder)
+        env:
+          MINIO_ENDPOINT: "http://reboot.home.arpa:9000"
+          MINIO_BUCKET: "rpi-artifacts"
+          MINIO_PREFIX: "httpboot-kernel"
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_RPI_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_RPI_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          export MC_CONFIG_DIR="$PWD/.mc"
+          rm -rf "$MC_CONFIG_DIR"
+
+          mc alias set reboot "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+          mc ls "reboot/$MINIO_BUCKET" >/dev/null
+
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BU
