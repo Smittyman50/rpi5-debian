@@ -1,32 +1,53 @@
 #!/usr/bin/env python3
-import os, yaml
-from jinja2 import Environment, FileSystemLoader
+import os
+import yaml
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-env = Environment(loader=FileSystemLoader("templates"), autoescape=False)
+TEMPLATES_DIR = "templates"
+INVENTORY_FILE = "inventory/pis.yml"
+OUT_BASE = "out/seeds"
+
+env = Environment(
+    loader=FileSystemLoader(TEMPLATES_DIR),
+    autoescape=False,
+    trim_blocks=True,     # helps remove extra newlines around block tags
+    lstrip_blocks=True,   # strips leading spaces before block tags
+    undefined=StrictUndefined,  # fail fast if a variable is missing/misspelled
+)
+
 t_user = env.get_template("user-data.j2")
 t_meta = env.get_template("meta-data.j2")
 
-with open("inventory/pis.yml","r",encoding="utf-8") as f:
-    inv = yaml.safe_load(f)
+with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
+    inv = yaml.safe_load(f) or {}
 
-out_base = "out/seeds"
-os.makedirs(out_base, exist_ok=True)
+os.makedirs(OUT_BASE, exist_ok=True)
 
-for serial, cfg in inv.get("pis", {}).items():
-    d = os.path.join(out_base, serial)
+pis = inv.get("pis", {}) or {}
+for serial, cfg in pis.items():
+    d = os.path.join(OUT_BASE, serial)
     os.makedirs(d, exist_ok=True)
 
-    meta = t_meta.render(serial=serial, hostname=cfg["hostname"])
-    user = t_user.render(
-        username=cfg.get("username","smittyman"),
-        ssh_authorized_keys=cfg.get("ssh_authorized_keys", []),
-        packages=cfg.get("packages", []),
-        timezone=cfg.get("timezone","UTC"),
+    # Render meta-data
+    meta = t_meta.render(
+        serial=serial,
+        hostname=cfg["hostname"],
     )
 
-    with open(os.path.join(d,"meta-data"),"w",encoding="utf-8") as f2:
-        f2.write(meta.strip()+"\n")
-    with open(os.path.join(d,"user-data"),"w",encoding="utf-8") as f2:
-        f2.write(user.strip()+"\n")
+    # Render user-data
+    user = t_user.render(
+        username=cfg.get("username", "smittyman"),
+        passwd_hash=cfg.get("passwd_hash", ""),     # <-- add this in pis.yml
+        docker=bool(cfg.get("docker", False)),      # <-- add/drive docker sections
+        ssh_authorized_keys=cfg.get("ssh_authorized_keys", []) or [],
+        packages=cfg.get("packages", []) or [],
+        timezone=cfg.get("timezone", "UTC"),
+    )
 
-print("Rendered seeds to out/seeds/")
+    with open(os.path.join(d, "meta-data"), "w", encoding="utf-8") as f2:
+        f2.write(meta.strip() + "\n")
+
+    with open(os.path.join(d, "user-data"), "w", encoding="utf-8") as f2:
+        f2.write(user.strip() + "\n")
+
+print(f"Rendered seeds to {OUT_BASE}/")
