@@ -65,7 +65,7 @@ fetch "$SEED/user-data" /mnt/root/boot/firmware/seed/user-data
 
 log "Writing NVMe cmdline..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
-console=ttyAMA10,115200 console=tty1 root=/dev/nvme0n1p2 rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud;s=/boot/firmware/seed/
+console=ttyAMA10,115200 console=tty1 root=UUID=${ROOT_UUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud;s=/boot/firmware/seed/
 EOF
 
 log "Writing NVMe config.txt..."
@@ -85,8 +85,8 @@ EOF
 
 log "Writing fstab..."
 cat > /mnt/root/etc/fstab <<EOF
-LABEL=rootfs  /              ext4  defaults,noatime  0  1
-LABEL=BOOT    /boot/firmware vfat  defaults         0  2
+UUID=${ROOT_UUID}  /              ext4  defaults,noatime  0  1
+UUID=${BOOT_UUID}  /boot/firmware vfat  defaults         0  2
 EOF
 
 sync
