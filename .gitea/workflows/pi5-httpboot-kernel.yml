@@ -2,7 +2,7 @@ name: pi5-httpboot-kernel
 
 on:
   schedule:
-    - cron: "0 3 * * 0"   # Sundays at 03:00
+    - cron: "30 6 * * 1"   # Sundays at 03:00
   workflow_dispatch:
 
 jobs:
