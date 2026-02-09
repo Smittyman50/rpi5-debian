@@ -30,7 +30,7 @@ runcmd:
   - [ bash, -lc, "systemctl enable --now ssh || true" ]
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
-{% if docker | default(false) %}
+{%- if docker | default(false) %}
   # Docker (only when docker:true)
   - [ bash, -lc, "install -m 0755 -d /etc/apt/keyrings" ]
   - [ bash, -lc, "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg" ]
