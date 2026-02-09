@@ -28,9 +28,14 @@ sudo debootstrap --arch="${ARCH}" --foreign "${SUITE}" "${ROOT}" http://deb.debi
 sudo cp /usr/bin/qemu-aarch64-static "${ROOT}/usr/bin/"
 sudo chroot "${ROOT}" /debootstrap/debootstrap --second-stage
 
+# (Optional) avoids some debconf/devpts noise; not strictly required
+sudo mkdir -p "${ROOT}/dev/pts"
+sudo mount -t devpts devpts "${ROOT}/dev/pts" 2>/dev/null || true
+
 # 3) Install tools the installer needs (keep this lean)
-sudo chroot "${ROOT}" bash -lc "
+sudo chroot "${ROOT}" bash -lc '
 set -e
+export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   busybox \
@@ -43,10 +48,9 @@ apt-get install -y --no-install-recommends \
   e2fsprogs \
   tar \
   zstd
-
 apt-get clean
 rm -rf /var/lib/apt/lists/*
-"
+'
 
 # 4) Drop in /init (bake HTTP_BASE)
 sudo install -m 0755 /dev/null "${ROOT}/init"
@@ -54,13 +58,15 @@ sudo sed "s|^HTTP_BASE=.*|HTTP_BASE=\"${HTTP_BASE}\"|g" "${INIT_SRC}" | sudo tee
 sudo chmod 0755 "${ROOT}/init"
 
 # 5) Ensure minimal dirs exist in initramfs image
-sudo mkdir -p "${ROOT}"/{proc,sys,dev,run,tmp,mnt}
+sudo mkdir -p "${ROOT}"/{proc,sys,dev,run,tmp,mnt,sysroot}
 
 # 6) Pack initramfs -> out/artifacts/initramfs.gz
-sudo bash -lc "
-cd '${ROOT}'
-find . -print0 | cpio --null -H newc -o | gzip -9 > '${INITRD_OUT}'
-"
+# Use an absolute path so "cd ROOT" doesn't affect output location
+INITRD_OUT_ABS="$(readlink -f "${INITRD_OUT}")"
+sudo bash -lc "set -e; cd '${ROOT}'; find . -print0 | cpio --null -H newc -o | gzip -9 > '${INITRD_OUT_ABS}'"
+
+# Cleanup devpts mount (if it was mounted)
+sudo umount "${ROOT}/dev/pts" 2>/dev/null || true
 
 sudo chown "$(id -u):$(id -g)" "${INITRD_OUT}"
 ls -lh "${INITRD_OUT}"
