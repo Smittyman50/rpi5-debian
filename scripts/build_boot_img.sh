@@ -29,6 +29,10 @@ mcopy -i "$OUT/boot.img" -s "$FW_BOOT"/overlays/* ::/overlays/
 # Your boot config + initramfs
 mcopy -i "$OUT/boot.img" boot/config.txt ::
 mcopy -i "$OUT/boot.img" boot/cmdline.txt ::
-mcopy -i "$OUT/boot.img" "$OUT/initramfs.gz" ::initramfs.gz
+
+INITRD="out/artifacts/initramfs.gz"
+[ -f "$INITRD" ] || INITRD="out/initramfs.gz"
+test -f "$INITRD"
+mcopy -i "$OUT/boot.img" "$INITRD" ::initramfs.gz
 
 echo "Built $OUT/boot.img"
