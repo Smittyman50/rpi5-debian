@@ -3,6 +3,11 @@ name: pi5-seeds-on-push
 on:
   push:
     branches: [ main ]
+    paths:
+      - "inventory/pis.yml"
+      - "templates/**"
+      - "scripts/render_seeds.py"
+      - "scripts/publish.sh"
   workflow_dispatch:
 
 jobs:
