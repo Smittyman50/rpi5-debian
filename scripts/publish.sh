@@ -21,7 +21,7 @@ if [[ -f out/boot.sig ]]; then
 fi
 
 # Everything the installer initramfs needs at runtime
-cp -f out/initramfs.gz dist/initramfs.gz
+cp -f out/artifacts/initramfs.gz dist/artifacts/initramfs.gz
 cp -f boot/config.txt dist/config.txt
 cp -f boot/cmdline.txt dist/cmdline.txt
 
