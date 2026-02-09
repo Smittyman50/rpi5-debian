@@ -6,9 +6,9 @@ users:
     shell: /bin/bash
     passwd: {{ passwd_hash }}
     ssh_authorized_keys:
-{%- for k in ssh_authorized_keys %}
+{% for k in ssh_authorized_keys %}
       - {{ k }}
-{%- endfor %}
+{% endfor %}
 
 ssh_pwauth: false
 disable_root: true
@@ -17,14 +17,14 @@ package_update: true
 
 packages:
   - openssh-server
-{%- for p in packages %}
+{% for p in packages %}
   - {{ p }}
-{%- endfor %}
-{%- if docker | default(false) %}
+{% endfor %}
+{% if docker | default(false) %}
   - ca-certificates
   - curl
   - gnupg
-{%- endif %}
+{% endif %}
 
 timezone: {{ timezone | default("UTC") }}
 
@@ -32,7 +32,7 @@ runcmd:
   - [ bash, -lc, "systemctl enable --now ssh || true" ]
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
-{%- if docker | default(false) %}
+{% if docker | default(false) %}
   # Docker (only when docker:true)
   - [ bash, -lc, "install -m 0755 -d /etc/apt/keyrings" ]
   - [ bash, -lc, "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg" ]
@@ -42,4 +42,4 @@ runcmd:
   - [ bash, -lc, "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ]
   - [ bash, -lc, "systemctl enable --now docker" ]
   - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
-{%- endif %}
+{% endif %}
