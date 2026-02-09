@@ -131,3 +131,57 @@ jobs:
           }
           EOF
           mc cp out/latest.json "reboot/$MINIO_BUCKET/$MINIO_PREFIX/latest.json"
+
+      - name: Prune MinIO builds (keep last 6)
+        env:
+          MINIO_ENDPOINT: "http://reboot.home.arpa:9000"
+          MINIO_BUCKET: "rpi-artifacts"
+          MINIO_PREFIX: "httpboot-kernel"
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_RPI_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_RPI_SECRET_KEY }}
+          RETAIN_BUILDS: "6"
+        run: |
+          set -euo pipefail
+
+          export MC_CONFIG_DIR="$PWD/.mc-prune"
+          rm -rf "$MC_CONFIG_DIR"
+
+          mc alias set reboot "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+
+          # List "folders" under the prefix and keep only build-id folders.
+          # Excludes: latest/, latest.json, and any non-build entries.
+          mc ls --json "reboot/$MINIO_BUCKET/$MINIO_PREFIX/" \
+            | jq -r '
+                select(.type=="folder")
+                | .key
+                | sub("/$";"")
+                | select(. != "latest")
+                | select(test("^[0-9]{8}-[0-9]{6}-[0-9a-f]{4,}$"))
+              ' \
+            | sort \
+            > /tmp/build_ids.txt
+
+          echo "Build folders found:"
+          cat /tmp/build_ids.txt || true
+
+          # If there are <= RETAIN_BUILDS, nothing to do
+          COUNT="$(wc -l < /tmp/build_ids.txt || echo 0)"
+          if [ "${COUNT}" -le "${RETAIN_BUILDS}" ]; then
+            echo "Nothing to prune (count=${COUNT}, retain=${RETAIN_BUILDS})"
+            exit 0
+          fi
+
+          KEEP_FILE=/tmp/keep_ids.txt
+          tail -n "${RETAIN_BUILDS}" /tmp/build_ids.txt > "$KEEP_FILE"
+
+          echo "Keeping:"
+          cat "$KEEP_FILE"
+
+          echo "Pruning:"
+          while read -r BID; do
+            [ -z "${BID}" ] && continue
+            if ! grep -qx "${BID}" "$KEEP_FILE"; then
+              echo "  deleting ${BID}/"
+              mc rm --recursive --force "reboot/$MINIO_BUCKET/$MINIO_PREFIX/$BID/"
+            fi
+          done < /tmp/build_ids.txt
