@@ -1,0 +1,56 @@
+name: pi5-seeds-on-push
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  seeds:
+    runs-on: [linux, host, docker]
+    env:
+      IRONHIDE_SSH_HOST: "ironhide.home.arpa"
+      IRONHIDE_SSH_USER: "deployer"
+      IRONHIDE_SEEDS_DIR: "/srv/http/rpi/httpboot/seeds"
+    steps:
+      - name: Checkout
+        env:
+          GITEA_REPO_TOKEN: ${{ secrets.GITEA_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf ./* ./.git || true
+          git clone "http://gitgard.home.arpa:3000/smittyman/rpi5-debian.git" .
+          git fetch --all --tags --prune
+          SHA="${GITHUB_SHA:-${GITEA_SHA:-}}"
+          if [ -n "${SHA:-}" ]; then git checkout -f "${SHA}"; fi
+          git rev-parse --short HEAD
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y python3 python3-pip rsync
+          pip3 install --break-system-packages pyyaml jinja2
+
+      - name: Render per-Pi cloud-init seeds
+        run: |
+          set -euo pipefail
+          chmod +x scripts/render_seeds.py
+          scripts/render_seeds.py
+
+      - name: Stage publish payload (seeds only)
+        run: |
+          set -euo pipefail
+          chmod +x scripts/publish.sh
+          PUBLISH_MODE=seeds scripts/publish.sh
+
+      - name: Deploy seeds to ironhide (no delete of boot artifacts)
+        env:
+          ANSIBLE_PRIVATE_KEY: ${{ secrets.ANSIBLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          echo "$ANSIBLE_PRIVATE_KEY" > /tmp/ironhide.key
+          chmod 600 /tmp/ironhide.key
+          rsync -avz --delete -e "ssh -i /tmp/ironhide.key -o StrictHostKeyChecking=no" \
+            dist/seeds/ \
+            "${IRONHIDE_SSH_USER}@${IRONHIDE_SSH_HOST}:${IRONHIDE_SEEDS_DIR}/"
