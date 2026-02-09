@@ -1,4 +1,4 @@
-name: pi5-httpboot-weekly
+name: pi5-httpboot-kernel
 
 on:
   schedule:
