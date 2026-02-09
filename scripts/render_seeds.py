@@ -10,6 +10,8 @@ OUT_BASE = "out/seeds"
 env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
     autoescape=False,
+    trim_blocks=True,
+    lstrip_blocks=True,
     undefined=StrictUndefined,  # fail fast if a variable is missing/misspelled
 )
 
