@@ -143,13 +143,17 @@ jobs:
           test -f dist/boot.img || { echo "Missing dist/boot.img"; exit 1; }
           rpi-eeprom-digest -i dist/boot.img -o dist/boot.sig -k rpi_httpboot_private.pem
 
-      - name: Deploy dist/ to ironhide (boot artifacts)
+      - name: Deploy dist/ to ironhide (boot artifacts; preserve seeds/)
         env:
           ANSIBLE_PRIVATE_KEY: ${{ secrets.ANSIBLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           echo "$ANSIBLE_PRIVATE_KEY" > /tmp/ironhide.key
           chmod 600 /tmp/ironhide.key
-          rsync -avz --delete -e "ssh -i /tmp/ironhide.key -o StrictHostKeyChecking=no" \
+
+          rsync -avz --delete \
+            --exclude 'seeds/' \
+            --filter 'protect seeds/***' \
+            -e "ssh -i /tmp/ironhide.key -o StrictHostKeyChecking=no" \
             dist/ \
             "${IRONHIDE_SSH_USER}@${IRONHIDE_SSH_HOST}:${IRONHIDE_HTTPBOOT_DIR}/"
