@@ -44,6 +44,13 @@ log "Formatting..."
 mkfs.vfat -F32 -n BOOT /dev/nvme0n1p1
 mkfs.ext4 -F -L rootfs /dev/nvme0n1p2
 
+ROOT_UUID="$(blkid -s UUID -o value /dev/nvme0n1p2)"
+BOOT_UUID="$(blkid -s UUID -o value /dev/nvme0n1p1)"
+[ -n "$ROOT_UUID" ] || die "Could not get ROOT_UUID"
+[ -n "$BOOT_UUID" ] || die "Could not get BOOT_UUID"
+log "ROOT_UUID=$ROOT_UUID"
+log "BOOT_UUID=$BOOT_UUID"
+
 mount /dev/nvme0n1p2 /mnt/root
 mkdir -p /mnt/root/boot/firmware
 mount /dev/nvme0n1p1 /mnt/root/boot/firmware
