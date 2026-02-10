@@ -223,44 +223,34 @@ if [ ! -x /mnt/root/usr/bin/cloud-init ] && [ ! -x /mnt/root/usr/bin/cloud-init 
   log "WARNING: cloud-init not found in target rootfs; NoCloud seed will not apply."
 fi
 
-# --- Per-Pi cloud-init seed (NoCloud) ---
-log "Fetching per-Pi cloud-init seed..."
+# --- Per-Pi cloud-init seed (NoCloud-Net) ---
+log "Installing NoCloud-Net seed into rootfs..."
 
-# 1) Seed on the boot partition (what your cmdline points at)
-mkdir -p /mnt/root/boot/firmware/seed
-fetch_or_die "${SEED}/meta-data" /mnt/root/boot/firmware/seed/meta-data
-fetch_or_die "${SEED}/user-data" /mnt/root/boot/firmware/seed/user-data
+SEED_DST="/mnt/root/var/lib/cloud/seed/nocloud-net"
+mkdir -p "${SEED_DST}"
 
-# 2) Seed inside the rootfs (cloud-init will always be able to read this)
-mkdir -p /mnt/root/var/lib/cloud/seed/nocloud-net
-cp -f /mnt/root/boot/firmware/seed/meta-data /mnt/root/var/lib/cloud/seed/nocloud-net/meta-data
-cp -f /mnt/root/boot/firmware/seed/user-data /mnt/root/var/lib/cloud/seed/nocloud-net/user-data
+fetch_or_die "${SEED}/meta-data" "${SEED_DST}/meta-data"
+fetch_or_die "${SEED}/user-data" "${SEED_DST}/user-data"
 
-# 3) Force datasource selection + allow hostname to be applied (avoid baked /etc/hostname winning)
+# Sanity check - never boot a broken image again
+grep -q '^instance-id:' "${SEED_DST}/meta-data" \
+  || die "meta-data missing instance-id"
+
+chmod 600 "${SEED_DST}/meta-data" "${SEED_DST}/user-data"
+
+# Force datasource selection
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
-
-cat > /mnt/root/etc/cloud/cloud.cfg.d/99-smitty-datasource.cfg <<'EOF'
-# Prefer NoCloud; fall back to None.
-datasource_list: [ NoCloud, None ]
+cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
+datasource_list: [ NoCloud-Net, None ]
 EOF
 
-cat > /mnt/root/etc/cloud/cloud.cfg.d/99-smitty-hostname.cfg <<'EOF'
-# Allow cloud-init to set hostname from user-data/meta-data.
+cat > /mnt/root/etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
 preserve_hostname: false
 EOF
 
-# (Optional but recommended) ensure cloud-init doesn't reuse stale state if this disk is reimaged
-rm -rf /mnt/root/var/lib/cloud/instance /mnt/root/var/lib/cloud/sem 2>/dev/null || true
-
-# Tighten permissions (not strictly required, but keeps it clean)
-chmod 600 /mnt/root/boot/firmware/seed/user-data /mnt/root/boot/firmware/seed/meta-data 2>/dev/null || true
-chmod 600 /mnt/root/var/lib/cloud/seed/nocloud-net/user-data /mnt/root/var/lib/cloud/seed/nocloud-net/meta-data 2>/dev/null || true
-
-# --- Boot config on NVMe ---
-log "Writing NVMe cmdline (root=PARTUUID=...)..."
-
+log "Writing NVMe cmdline.txt..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
-console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud;s=/var/lib/cloud/seed/nocloud/
+console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;s=/var/lib/cloud/seed/nocloud-net/
 EOF
 
 log "Writing NVMe config.txt..."
