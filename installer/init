@@ -73,7 +73,7 @@ fi
 # Ensure DNS is present (some initramfs DHCP clients may not write resolv.conf)
 if [ ! -s /etc/resolv.conf ]; then
   warn "/etc/resolv.conf is empty; writing a temporary resolver"
-  echo "nameserver 1.1.1.1" > /etc/resolv.conf
+  echo "nameserver 192.168.3.3" > /etc/resolv.conf
 fi
 
 # --- Identify Pi (serial) ---
