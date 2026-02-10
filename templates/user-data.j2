@@ -47,3 +47,8 @@ runcmd:
   - [ bash, -lc, "systemctl enable --now docker" ]
   - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
 {% endif %}
+
+power_state:
+  mode: reboot
+  timeout: 30
+  condition: true
