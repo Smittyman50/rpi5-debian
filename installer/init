@@ -58,8 +58,11 @@ if command -v ethtool >/dev/null 2>&1; then
   done
 fi
 
+# If dhclient is present, make it deterministic in initramfs contexts.
 if command -v dhclient >/dev/null 2>&1; then
-  dhclient -4 -v -1 eth0 || die "DHCP failed (dhclient)"
+  rm -f /run/dhclient.* /var/lib/dhcp/dhclient.* 2>/dev/null || true
+  dhclient -4 -v -1 -pf /run/dhclient.pid -lf /run/dhclient.leases eth0 \
+    || die "DHCP failed (dhclient)"
 elif command -v udhcpc >/dev/null 2>&1; then
   # -n: exit if lease fails; -q: quiet-ish; -f: run in foreground
   udhcpc -i eth0 -n -q -f || die "DHCP failed (udhcpc)"
@@ -90,13 +93,20 @@ fetch() {
   rm -f "$out" 2>/dev/null || true
   if command -v curl >/dev/null 2>&1; then
     curl -fL --connect-timeout 10 --retry 5 --retry-delay 1 --retry-connrefused -o "$out" "$url" \
-      || die "Fetch failed (curl): $url"
+      || return 1
   elif command -v wget >/dev/null 2>&1; then
     wget -q --timeout=10 --tries=5 -O "$out" "$url" \
-      || die "Fetch failed (wget): $url"
+      || return 1
   else
     die "Neither curl nor wget is available"
   fi
+  return 0
+}
+
+fetch_or_die() {
+  url="$1"
+  out="$2"
+  fetch "$url" "$out" || die "Fetch failed: $url"
 }
 
 # --- Decompression helper (prefer zstd -dc; fallback unzstd -c) ---
@@ -156,6 +166,11 @@ if command -v partprobe >/dev/null 2>&1; then
   partprobe /dev/nvme0n1 2>/dev/null || true
 fi
 
+# If udev exists, settle again after partition changes
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm settle 2>/dev/null || true
+fi
+
 # Wait for partition nodes
 log "Waiting for NVMe partitions..."
 i=0
@@ -168,6 +183,11 @@ done
 log "Formatting..."
 mkfs.vfat -F32 -n BOOT /dev/nvme0n1p1 || die "mkfs.vfat failed"
 mkfs.ext4 -F -L rootfs /dev/nvme0n1p2 || die "mkfs.ext4 failed"
+
+# Ensure blkid sees the new UUIDs
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm settle 2>/dev/null || true
+fi
 
 ROOT_UUID="$(blkid -s UUID -o value /dev/nvme0n1p2 2>/dev/null || true)"
 BOOT_UUID="$(blkid -s UUID -o value /dev/nvme0n1p1 2>/dev/null || true)"
@@ -183,14 +203,14 @@ mount /dev/nvme0n1p1 /mnt/root/boot/firmware || die "Mount boot firmware failed"
 
 # --- Install Debian rootfs ---
 log "Fetching Debian rootfs..."
-fetch "${ART}/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
+fetch_or_die "${ART}/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
 
 log "Extracting rootfs..."
 zstd_cat /tmp/rootfs.tar.zst | tar -xpf - -C /mnt/root || die "Extract rootfs failed"
 
 # --- Install Pi firmware bundle ---
 log "Fetching Pi firmware bundle..."
-fetch "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
+fetch_or_die "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
 
 log "Installing firmware..."
 zstd_cat /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware || die "Extract firmware failed"
@@ -198,14 +218,8 @@ zstd_cat /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware || die
 # --- Per-Pi cloud-init seed (NoCloud) ---
 log "Fetching per-Pi cloud-init seed..."
 mkdir -p /mnt/root/boot/firmware/seed
-fetch "${SEED}/meta-data" /mnt/root/boot/firmware/seed/meta-data
-fetch "${SEED}/user-data" /mnt/root/boot/firmware/seed/user-data
-# Optional (if present on your server). Don't fail if absent.
-if fetch "${SEED}/network-config" /mnt/root/boot/firmware/seed/network-config 2>/dev/null; then
-  log "Fetched network-config"
-else
-  rm -f /mnt/root/boot/firmware/seed/network-config 2>/dev/null || true
-fi
+fetch_or_die "${SEED}/meta-data" /mnt/root/boot/firmware/seed/meta-data
+fetch_or_die "${SEED}/user-data" /mnt/root/boot/firmware/seed/user-data
 
 # --- Boot config on NVMe ---
 log "Writing NVMe cmdline..."
@@ -234,7 +248,7 @@ UUID=${ROOT_UUID}  /              ext4  defaults,noatime  0  1
 UUID=${BOOT_UUID}  /boot/firmware vfat  defaults         0  2
 EOF
 
-# Extra safety: ensure the seed directory is readable on first boot
+# Extra safety: ensure everything is on disk before reboot
 sync
 
 # --- Clean unmount ---
