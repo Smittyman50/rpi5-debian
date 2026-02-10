@@ -4,6 +4,7 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     groups: [sudo{% if docker | default(false) %}, docker{% endif %}]
     shell: /bin/bash
+    lock_passwd: false
     passwd: {{ passwd_hash }}
     ssh_authorized_keys:
 {% for k in ssh_authorized_keys %}
