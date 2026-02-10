@@ -200,7 +200,7 @@ log "Fetching per-Pi cloud-init seed..."
 mkdir -p /mnt/root/boot/firmware/seed
 fetch "${SEED}/meta-data" /mnt/root/boot/firmware/seed/meta-data
 fetch "${SEED}/user-data" /mnt/root/boot/firmware/seed/user-data
-# Optional (if present on your server). Don’t fail if absent.
+# Optional (if present on your server). Don't fail if absent.
 if fetch "${SEED}/network-config" /mnt/root/boot/firmware/seed/network-config 2>/dev/null; then
   log "Fetched network-config"
 else
