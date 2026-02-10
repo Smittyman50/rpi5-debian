@@ -4,7 +4,6 @@
 # - Brings up network (DHCP)
 # - Partitions + formats NVMe (GPT: BOOT vfat + ROOT ext4)
 # - Installs Debian rootfs + Pi firmware bundle
-# - Drops NoCloud seed into /boot/firmware/seed
 # - Writes cmdline.txt using ROOT *PARTUUID* (more robust at early boot)
 # - Writes fstab using filesystem UUIDs
 #
@@ -219,25 +218,6 @@ fetch_or_die "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
 log "Installing firmware..."
 zstd_cat /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware || die "Extract firmware failed"
 
-if [ ! -x /mnt/root/usr/bin/cloud-init ] && [ ! -x /mnt/root/usr/bin/cloud-init ] ; then
-  log "WARNING: cloud-init not found in target rootfs; NoCloud seed will not apply."
-fi
-
-# --- Per-Pi cloud-init seed (NoCloud-Net) ---
-log "Installing NoCloud-Net seed into rootfs..."
-
-SEED_DST="/mnt/root/var/lib/cloud/seed/nocloud-net"
-mkdir -p "${SEED_DST}"
-
-fetch_or_die "${SEED}/meta-data" "${SEED_DST}/meta-data"
-fetch_or_die "${SEED}/user-data" "${SEED_DST}/user-data"
-
-# Sanity check - never boot a broken image again
-grep -q '^instance-id:' "${SEED_DST}/meta-data" \
-  || die "meta-data missing instance-id"
-
-chmod 600 "${SEED_DST}/meta-data" "${SEED_DST}/user-data"
-
 # Force datasource selection
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
@@ -258,7 +238,7 @@ EOF
 
 log "Writing NVMe cmdline.txt..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
-console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;s=http://192.168.3.26/rpi/httpboot/seeds/bf751bd2c30fa742/
+console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;s=${SEED}/
 EOF
 
 log "Writing NVMe config.txt..."
