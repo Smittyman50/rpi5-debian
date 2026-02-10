@@ -1,4 +1,9 @@
 #cloud-config
+locale: en_US.UTF-8
+keyboard:
+  layout: us
+timezone: America/New_York
+
 users:
   - name: {{ username }}
     sudo: ALL=(ALL) NOPASSWD:ALL
