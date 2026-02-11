@@ -261,6 +261,15 @@ log "Installing Pi kernel modules into /lib/modules..."
 mkdir -p /mnt/root/lib/modules
 zstd_cat /tmp/pi-modules.tar.zst | tar -xpf - -C /mnt/root/lib/modules || die "Extract modules failed"
 
+# Validate we installed a Pi 5-compatible module tree (prefer v8-16k+)
+KVER_INSTALLED="$(ls -1 /mnt/root/lib/modules 2>/dev/null | sort -V | grep -E '(^|-)v8-16k\+$' | tail -n1 || true)"
+if [ -z "${KVER_INSTALLED:-}" ]; then
+  warn "No v8-16k+ module tree found under /mnt/root/lib/modules; found:"
+  ls -la /mnt/root/lib/modules || true
+  die "Kernel modules missing/incorrect (expected *-v8-16k+)"
+fi
+log "Installed kernel modules: $KVER_INSTALLED"
+
 # Force datasource selection
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
