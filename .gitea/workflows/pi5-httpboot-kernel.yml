@@ -43,6 +43,31 @@ jobs:
           chmod +x scripts/fetch_rpi_firmware.sh
           scripts/fetch_rpi_firmware.sh
 
+      - name: Diagnostics - firmware + modules inventory
+        run: |
+          set -euxo pipefail
+
+          echo "=== Firmware boot artifacts ==="
+          ls -la out/rpi-firmware/boot | head -200 || true
+          ls -la out/rpi-firmware/boot | egrep 'kernel_2712\.img|bcm2712.*\.dtb|start4\.elf|fixup4\.dat' || true
+
+          echo "=== Firmware repo top-level ==="
+          ls -la out/rpi-firmware | head -200 || true
+
+          echo "=== Look for module trees under out/rpi-firmware ==="
+          find out/rpi-firmware -maxdepth 4 -type d \( -name modules -o -path '*/lib/modules/*' -o -path '*/modules/*' \) -print || true
+
+          echo "=== List module versions if firmware/modules exists ==="
+          if [ -d out/rpi-firmware/modules ]; then
+            ls -la out/rpi-firmware/modules || true
+            ls -1 out/rpi-firmware/modules | head -200 || true
+          else
+            echo "NOTE: out/rpi-firmware/modules does not exist"
+          fi
+
+          echo "=== Any depmod outputs in out/? ==="
+          find out -maxdepth 8 -type f \( -name modules.dep -o -name modules.alias \) -print | head -200 || true
+
       - name: Build Debian rootfs (arm64)
         run: |
           set -euo pipefail
@@ -68,6 +93,14 @@ jobs:
           set -euo pipefail
           chmod +x scripts/publish.sh
           PUBLISH_MODE=boot scripts/publish.sh
+
+      - name: Diagnostics - dist payload inventory
+        run: |
+          set -euxo pipefail
+          echo "=== dist tree ==="
+          find dist -maxdepth 3 -type f -print | sort || true
+          echo "=== dist/artifacts listing ==="
+          ls -la dist/artifacts || true
 
       - name: Materialize signing key
         env:
