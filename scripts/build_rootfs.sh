@@ -22,7 +22,7 @@ set -e
 
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io fake-hwclock
+  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io fake-hwclock systemd-timesyncd
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
@@ -38,8 +38,14 @@ mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service || true
 
 # Enable fake-hwclock without systemctl
-mkdir -p /etc/systemd/system/basic.target.wants
-ln -sf /lib/systemd/system/fake-hwclock.service /etc/systemd/system/basic.target.wants/fake-hwclock.service || true
+mkdir -p /etc/systemd/system/multi-user.target.wants
+ln -sf /lib/systemd/system/fake-hwclock.service \
+  /etc/systemd/system/multi-user.target.wants/fake-hwclock.service || true
+
+# Enable systemd-timesyncd without systemctl
+mkdir -p /etc/systemd/system/sysinit.target.wants
+ln -sf /lib/systemd/system/systemd-timesyncd.service \
+  /etc/systemd/system/sysinit.target.wants/systemd-timesyncd.service || true
 
 echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
 
