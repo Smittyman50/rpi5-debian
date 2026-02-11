@@ -22,7 +22,7 @@ set -e
 
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io
+  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io fake-hwclock
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
@@ -34,19 +34,15 @@ passwd -l root || true
 mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service || true
 
+# Enable fake-hwclock without systemctl
+mkdir -p /etc/systemd/system/basic.target.wants
+ln -sf /lib/systemd/system/fake-hwclock.service /etc/systemd/system/basic.target.wants/fake-hwclock.service || true
+
 echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
 
 # --- CRITICAL: sanitize image so first boot is truly first boot ---
 rm -rf /var/lib/cloud
 rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
-
-# inside your rootfs staging directory, e.g. $ROOT
-rm -f /var/lib/systemd/timesync/clock \
-      /var/lib/systemd/timesync/clock.* \
-      /var/lib/systemd/timesync/clock-* \
-      /etc/fake-hwclock.data \
-      /var/lib/fake-hwclock.data 2>/dev/null || true
-
 rm -f /etc/machine-id
 rm -f /var/lib/dbus/machine-id
 "
