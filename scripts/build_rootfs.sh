@@ -108,6 +108,18 @@ enable_unit ssh.service
 enable_unit fake-hwclock.service
 enable_unit chrony.service
 
+mkdir -p /etc/cloud/cloud.cfg.d
+
+cat > /etc/cloud/cloud.cfg.d/90-keyboard-disabled.cfg <<'EOF'
+keyboard:
+  config: disabled
+EOF
+
+cat > /etc/cloud/cloud.cfg.d/90-disable-rightscale.cfg <<'EOF'
+datasource:
+  RightScale: {enabled: false}
+EOF
+
 echo \"built=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > /etc/rootfs-build-info
 
 # --- sanitize image so first boot is truly first boot ---
