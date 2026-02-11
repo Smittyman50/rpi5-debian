@@ -39,6 +39,7 @@ cleanup_mounts() {
   sudo umount -lf "$ROOTFS_DIR/sys"     2>/dev/null || true
   sudo umount -lf "$ROOTFS_DIR/run"     2>/dev/null || true
 }
+trap cleanup_mounts EXIT
 
 sudo chroot "$ROOTFS_DIR" bash -lc "
 set -euo pipefail
