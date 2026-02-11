@@ -81,7 +81,8 @@ log "Synchronizing time (pre-cloud-init)..."
 
 # If busybox provides ntpd, use it (one-shot query). Try a few servers.
 if command -v ntpd >/dev/null 2>&1; then
-  ntpd -q -p pool.ntp.org  >/dev/null 2>&1 || true
+  ntpd -q -p 192.168.3.5 >/dev/null 2>&1 || true
+  ntpd -q -p pool.ntp.org >/dev/null 2>&1 || true
   ntpd -q -p time.google.com >/dev/null 2>&1 || true
 fi
 
