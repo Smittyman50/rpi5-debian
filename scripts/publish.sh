@@ -82,7 +82,23 @@ if [[ "$want_boot" -eq 1 ]]; then
   FW_MOD="out/rpi-firmware/modules"
   test -d "$FW_MOD" || { echo "Missing $FW_MOD"; exit 1; }
 
-  KVER="${KVER:-6.12.69-v8-16k+}"
+  # Prefer the Pi 5 kernel flavor: v8-16k+
+  if [ -z "${KVER:-}" ]; then
+    KVER="$(ls -1 "$FW_MOD" 2>/dev/null | sort -V | grep -E '(^|-)v8-16k\+$' | tail -n1 || true)"
+  fi
+
+  # Fallback: any v8+ if v8-16k+ not present
+  if [ -z "${KVER:-}" ]; then
+    KVER="$(ls -1 "$FW_MOD" 2>/dev/null | sort -V | grep -E '(^|-)v8\+$' | tail -n1 || true)"
+  fi
+
+  # Last resort: latest directory at all
+  if [ -z "${KVER:-}" ]; then
+    KVER="$(ls -1 "$FW_MOD" 2>/dev/null | sort -V | tail -n1 || true)"
+  fi
+
+  test -n "${KVER:-}" || { echo "No module versions found under $FW_MOD"; exit 1; }
+
   test -d "$FW_MOD/$KVER" || {
     echo "Missing modules for $KVER at $FW_MOD/$KVER"
     echo "Available:"
@@ -90,8 +106,8 @@ if [[ "$want_boot" -eq 1 ]]; then
     exit 1
   }
 
-  tar -C "$FW_MOD" -cpf - "$KVER" \
-    | zstd -19 -T0 -o dist/artifacts/pi-modules.tar.zst
+  echo "Using KVER=$KVER"
+  tar -C "$FW_MOD" -cpf - "$KVER" | zstd -19 -T0 -o dist/artifacts/pi-modules.tar.zst
 fi
 
 # -----------
