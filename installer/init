@@ -79,35 +79,7 @@ fi
 log "Synchronizing time (pre-cloud-init)..."
 log "Time before: $(date -R 2>/dev/null || date)"
 
-run() {
-  log "+ $*"
-  "$@" 2>&1 | while IFS= read -r line; do log "$line"; done
-  rc=$?
-  log "rc=$rc"
-  return $rc
-}
-
-for c in ntpd sntp ntpdate rdate; do
-  command -v "$c" >/dev/null 2>&1 && log "Time tool present: $c"
-done
-
-# ---- 1) NTP (best) ----
-NTP_OK=0
-if command -v ntpd >/dev/null 2>&1; then
-  run ntpd -n -q -p 192.168.3.5 && NTP_OK=1 || true
-  [ "$NTP_OK" -eq 1 ] || (run ntpd -n -q -p pool.ntp.org && NTP_OK=1) || true
-  [ "$NTP_OK" -eq 1 ] || (run ntpd -n -q -p time.google.com && NTP_OK=1) || true
-else
-  log "ntpd not present in initramfs"
-fi
-
-log "Time after NTP: $(date -R 2>/dev/null || date)"
-
-# ---- 2) Epoch fallback only if still wrong ----
-YEAR="$(date +%Y 2>/dev/null || echo 0)"
-if [ "$YEAR" -lt 2026 ]; then
-  warn "Clock still invalid after NTP (year=$YEAR); using epoch fallback from ironhide"
-
+# Epoch Timesync----
   EPOCH=""
   if command -v curl >/dev/null 2>&1; then
     EPOCH="$(curl -fsS http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
@@ -124,9 +96,6 @@ if [ "$YEAR" -lt 2026 ]; then
       log "Time after epoch set: $(date -R 2>/dev/null || date)"
       ;;
   esac
-else
-  log "Clock looks sane after NTP (year=$YEAR); skipping epoch fallback"
-fi
 
 # --- Identify Pi (serial) ---
 SERIAL="$(awk '/^Serial/ {print $3}' /proc/cpuinfo 2>/dev/null | tail -n1)"
@@ -295,19 +264,11 @@ zstd_cat /tmp/pi-modules.tar.zst | tar -xpf - -C /mnt/root/lib/modules || die "E
 # Force datasource selection
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloud-Net, None ]
+datasource_list: [ NoCloud, NoCloudNet ]
 EOF
 
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
 preserve_hostname: false
-EOF
-
-# Remove any datasource overrides that might contain the invalid "NoCloud-Net"
-rm -f /mnt/root/etc/cloud/cloud.cfg.d/*datasource* /mnt/root/etc/cloud/cloud.cfg.d/*NoCloud*
-
-# Force the correct datasource list (note: NoCloudNet, no hyphen)
-cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloud, NoCloudNet ]
 EOF
 
 log "Writing NVMe cmdline.txt..."
