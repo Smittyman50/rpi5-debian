@@ -30,6 +30,14 @@ rm -rf /var/lib/apt/lists/*
 # Seed fake-hwclock with build time so first boot isn't 1970
 date -u +%Y-%m-%d\ %H:%M:%S > /etc/fake-hwclock.data
 
+# Create chrony source file
+cat >/etc/chrony/conf.d/10-local-sources.conf <<'EOF'
+server 192.168.3.5 iburst prefer
+pool pool.ntp.org iburst
+makestep 1.0 -1
+rtcsync
+EOF
+
 # Lock root account
 passwd -l root || true
 
