@@ -87,6 +87,10 @@ run() {
   return $rc
 }
 
+for c in ntpd sntp ntpdate rdate; do
+  command -v "$c" >/dev/null 2>&1 && log "Time tool present: $c"
+done
+
 # ---- 1) NTP (best) ----
 NTP_OK=0
 if command -v ntpd >/dev/null 2>&1; then
@@ -258,6 +262,20 @@ fetch_or_die "${ART}/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
 
 log "Extracting rootfs..."
 zstd_cat /tmp/rootfs.tar.zst | tar -xpf - -C /mnt/root || die "Extract rootfs failed"
+
+# --- Sanitize rootfs so NVMe boot is a true first boot ---
+log "Sanitizing rootfs (cloud-init + machine-id + timesync state)..."
+
+# Remove cloud-init state baked into the rootfs artifact (your June 2025 problem)
+rm -rf /mnt/root/var/lib/cloud 2>/dev/null || true
+rm -f  /mnt/root/var/log/cloud-init.log /mnt/root/var/log/cloud-init-output.log 2>/dev/null || true
+
+# Force machine-id regeneration on first boot
+rm -f /mnt/root/etc/machine-id 2>/dev/null || true
+rm -f /mnt/root/var/lib/dbus/machine-id 2>/dev/null || true
+
+# If present, remove any persisted timesync state
+rm -f /mnt/root/var/lib/systemd/timesync/clock /mnt/root/var/lib/systemd/timesync/clock.* 2>/dev/null || true
 
 # --- Install Pi firmware bundle ---
 log "Fetching Pi firmware bundle..."
