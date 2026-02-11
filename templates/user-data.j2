@@ -24,6 +24,12 @@ package_update: true
 packages:
   - openssh-server
   - chrony
+  - ca-certificates
+  - curl
+  - vim
+  - git
+  - python3
+  - duf
 {% for p in packages %}
   - {{ p }}
 {% endfor %}
