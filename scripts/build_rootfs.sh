@@ -39,7 +39,6 @@ cleanup_mounts() {
   sudo umount -lf "$ROOTFS_DIR/sys"     2>/dev/null || true
   sudo umount -lf "$ROOTFS_DIR/run"     2>/dev/null || true
 }
-trap cleanup_mounts EXIT
 
 sudo chroot "$ROOTFS_DIR" bash -lc "
 set -euo pipefail
@@ -110,6 +109,10 @@ rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
 rm -f /etc/machine-id
 rm -f /var/lib/dbus/machine-id
 "
+
+# tear down mounts BEFORE packaging
+cleanup_mounts
+trap - EXIT
 
 # Create compressed artifact
 sudo tar -C "$ROOTFS_DIR" -cpf - . | zstd -19 -T0 -o "$OUT_TAR"
