@@ -50,4 +50,7 @@ for serial, cfg in pis.items():
     with open(os.path.join(d, "user-data"), "w", encoding="utf-8") as f2:
         f2.write(user.strip() + "\n")
 
+    with open(os.path.join(d, "vendor-data"), "w", encoding="utf-8") as f2:
+        f2.write("# empty vendor-data\n")
+
 print(f"Rendered seeds to {OUT_BASE}/")
