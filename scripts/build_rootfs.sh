@@ -27,6 +27,9 @@ apt-get install -y --no-install-recommends \
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
+# Seed fake-hwclock with build time so first boot isn't 1970
+date -u +%Y-%m-%d\ %H:%M:%S > /etc/fake-hwclock.data
+
 # Lock root account
 passwd -l root || true
 
