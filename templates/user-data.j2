@@ -38,24 +38,13 @@ packages:
 {% endif %}
 
 write_files:
-  - path: /etc/chrony/chrony.conf
+  - path: /etc/chrony/conf.d/10-local-sources.conf
     owner: root:root
     permissions: "0644"
     content: |
-      # Managed by cloud-init
-      # Use local/lab NTP first, then public fallbacks.
       server 192.168.3.5 iburst prefer
       pool pool.ntp.org iburst
-
-      # Drift file
-      driftfile /var/lib/chrony/chrony.drift
-
-      # Step the clock on startup if it's far off (important for Pi/no RTC)
       makestep 1.0 10
-
-      # Log (optional but useful)
-      logdir /var/log/chrony
-      log tracking measurements statistics
 
 runcmd:
   - [ bash, -lc, "systemctl enable --now ssh || true" ]
