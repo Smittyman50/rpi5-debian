@@ -77,25 +77,52 @@ if [ ! -s /etc/resolv.conf ]; then
 fi
 
 log "Synchronizing time (pre-cloud-init)..."
-log "Time before: $(date -R)"
+log "Time before: $(date -R 2>/dev/null || date)"
 
+run() {
+  log "+ $*"
+  "$@" 2>&1 | while IFS= read -r line; do log "$line"; done
+  rc=$?
+  log "rc=$rc"
+  return $rc
+}
+
+# ---- 1) NTP (best) ----
+NTP_OK=0
 if command -v ntpd >/dev/null 2>&1; then
-  ntpd -n -q -p 192.168.3.5 || \
-  ntpd -n -q -p pool.ntp.org || true
+  run ntpd -n -q -p 192.168.3.5 && NTP_OK=1 || true
+  [ "$NTP_OK" -eq 1 ] || (run ntpd -n -q -p pool.ntp.org && NTP_OK=1) || true
+  [ "$NTP_OK" -eq 1 ] || (run ntpd -n -q -p time.google.com && NTP_OK=1) || true
+else
+  log "ntpd not present in initramfs"
 fi
 
-log "Time after NTP: $(date -R)"
+log "Time after NTP: $(date -R 2>/dev/null || date)"
 
-# Fallback: HTTP Date header (NO TLS dependency)
-HDR_DATE=""
-if command -v curl >/dev/null 2>&1; then
-  HDR_DATE="$(curl -fsSI http://192.168.3.26/ 2>/dev/null | awk -F': ' 'BEGIN{IGNORECASE=1} /^date:/{print $2; exit}')"
-elif command -v wget >/dev/null 2>&1; then
-  HDR_DATE="$(wget -qSO- http://192.168.3.26/ 2>&1 | awk -F': ' 'BEGIN{IGNORECASE=1} /^ *date:/{print $2; exit}')"
+# ---- 2) Epoch fallback only if still wrong ----
+YEAR="$(date +%Y 2>/dev/null || echo 0)"
+if [ "$YEAR" -lt 2026 ]; then
+  warn "Clock still invalid after NTP (year=$YEAR); using epoch fallback from ironhide"
+
+  EPOCH=""
+  if command -v curl >/dev/null 2>&1; then
+    EPOCH="$(curl -fsS http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
+  elif command -v wget >/dev/null 2>&1; then
+    EPOCH="$(wget -qO- http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
+  fi
+
+  case "$EPOCH" in
+    ''|*[!0-9]*)
+      warn "Epoch fetch failed/invalid: ${EPOCH:-<empty>}"
+      ;;
+    *)
+      run date -u -s "@$EPOCH" || true
+      log "Time after epoch set: $(date -R 2>/dev/null || date)"
+      ;;
+  esac
+else
+  log "Clock looks sane after NTP (year=$YEAR); skipping epoch fallback"
 fi
-
-log "HTTP Date header: ${HDR_DATE:-<empty>}"
-[ -n "${HDR_DATE:-}" ] && date -s "$HDR_DATE" && log "Time after set: $(date -R)"
 
 # --- Identify Pi (serial) ---
 SERIAL="$(awk '/^Serial/ {print $3}' /proc/cpuinfo 2>/dev/null | tail -n1)"
