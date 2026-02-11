@@ -284,6 +284,14 @@ fetch_or_die "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
 log "Installing firmware..."
 zstd_cat /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware || die "Extract firmware failed"
 
+# --- Install matching Pi kernel modules (required for Docker networking, overlay, etc.) ---
+log "Fetching Pi kernel modules bundle..."
+fetch_or_die "${ART}/pi-modules.tar.zst" /tmp/pi-modules.tar.zst
+
+log "Installing Pi kernel modules into /lib/modules..."
+mkdir -p /mnt/root/lib/modules
+zstd_cat /tmp/pi-modules.tar.zst | tar -xpf - -C /mnt/root/lib/modules || die "Extract modules failed"
+
 # Force datasource selection
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
