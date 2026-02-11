@@ -30,8 +30,6 @@ packages:
   - gnupg
 {% endif %}
 
-timezone: {{ timezone | default("UTC") }}
-
 runcmd:
   - [ bash, -lc, "systemctl enable --now ssh || true" ]
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
