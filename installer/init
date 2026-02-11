@@ -76,37 +76,26 @@ if [ ! -s /etc/resolv.conf ]; then
   echo "nameserver 192.168.3.3" > /etc/resolv.conf
 fi
 
-# --- Time: ensure clock is sane before any TLS/APT (Pi has no RTC) ---
 log "Synchronizing time (pre-cloud-init)..."
+log "Time before: $(date -R)"
 
-# If busybox provides ntpd, use it (one-shot query). Try a few servers.
 if command -v ntpd >/dev/null 2>&1; then
-  ntpd -q -p 192.168.3.5 >/dev/null 2>&1 || true
-  ntpd -q -p pool.ntp.org >/dev/null 2>&1 || true
-  ntpd -q -p time.google.com >/dev/null 2>&1 || true
+  ntpd -n -q -p 192.168.3.5 || \
+  ntpd -n -q -p pool.ntp.org || true
 fi
 
-# Fallback: pull Date header from an HTTPS site (requires wget/curl in initramfs).
-# This is only used if the year is still obviously wrong.
-YEAR="$(date +%Y 2>/dev/null || echo 0)"
-if [ "$YEAR" -lt 2026 ]; then
-  warn "Clock still looks wrong (year=$YEAR); attempting HTTP(S) Date header fallback"
+log "Time after NTP: $(date -R)"
 
-  if command -v curl >/dev/null 2>&1; then
-    HDR_DATE="$(curl -fsSI https://google.com 2>/dev/null | awk -F': ' 'BEGIN{IGNORECASE=1} /^date:/{print $2; exit}')"
-  elif command -v wget >/dev/null 2>&1; then
-    HDR_DATE="$(wget -qSO- https://google.com 2>&1 | awk -F': ' 'BEGIN{IGNORECASE=1} /^ *date:/{print $2; exit}')"
-  else
-    HDR_DATE=""
-  fi
-
-  if [ -n "${HDR_DATE:-}" ]; then
-    # BusyBox date supports -s with RFC1123 on many builds; if not, you may need a manual set.
-    date -s "$HDR_DATE" 2>/dev/null || true
-  fi
+# Fallback: HTTP Date header (NO TLS dependency)
+HDR_DATE=""
+if command -v curl >/dev/null 2>&1; then
+  HDR_DATE="$(curl -fsSI http://192.168.3.26/ 2>/dev/null | awk -F': ' 'BEGIN{IGNORECASE=1} /^date:/{print $2; exit}')"
+elif command -v wget >/dev/null 2>&1; then
+  HDR_DATE="$(wget -qSO- http://192.168.3.26/ 2>&1 | awk -F': ' 'BEGIN{IGNORECASE=1} /^ *date:/{print $2; exit}')"
 fi
 
-log "Current time: $(date -R 2>/dev/null || date)"
+log "HTTP Date header: ${HDR_DATE:-<empty>}"
+[ -n "${HDR_DATE:-}" ] && date -s "$HDR_DATE" && log "Time after set: $(date -R)"
 
 # --- Identify Pi (serial) ---
 SERIAL="$(awk '/^Serial/ {print $3}' /proc/cpuinfo 2>/dev/null | tail -n1)"
