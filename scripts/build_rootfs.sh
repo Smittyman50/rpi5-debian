@@ -34,6 +34,8 @@ passwd -l root || true
 mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service || true
 
+echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
+
 # --- CRITICAL: sanitize image so first boot is truly first boot ---
 rm -rf /var/lib/cloud
 rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
