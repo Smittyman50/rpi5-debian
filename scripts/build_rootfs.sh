@@ -22,15 +22,18 @@ set -e
 
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io fake-hwclock chrony
+  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
+  fake-hwclock chrony
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
 # Seed fake-hwclock with build time so first boot isn't 1970
-date -u +%Y-%m-%d\ %H:%M:%S > /etc/fake-hwclock.data
+date -u '+%Y-%m-%d %H:%M:%S' > /etc/fake-hwclock.data
 
-# Create chrony source file
+# Chrony config (Debian)
+mkdir -p /etc/chrony/conf.d
+
 cat >/etc/chrony/conf.d/10-local-sources.conf <<'EOF'
 server 192.168.3.5 iburst prefer
 pool pool.ntp.org iburst
@@ -38,25 +41,31 @@ makestep 1.0 -1
 rtcsync
 EOF
 
+# Ensure chrony.conf includes conf.d (usually does, but make it explicit if missing)
+if ! grep -qE '^[[:space:]]*include[[:space:]]+/etc/chrony/conf.d/\\*\\.conf' /etc/chrony/chrony.conf 2>/dev/null; then
+  echo 'include /etc/chrony/conf.d/*.conf' >> /etc/chrony/chrony.conf
+fi
+
 # Lock root account
 passwd -l root || true
 
-# Enable ssh without systemctl (safe in chroot)
-mkdir -p /etc/systemd/system/multi-user.target.wants
-ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service || true
+# Enable services (prefer systemctl; fallback to symlinks)
+enable_unit() {
+  u=\"\$1\"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable \"\$u\" >/dev/null 2>&1 && return 0
+  fi
+  mkdir -p /etc/systemd/system/multi-user.target.wants
+  ln -sf \"/lib/systemd/system/\$u\" \"/etc/systemd/system/multi-user.target.wants/\$u\" || true
+}
 
-# Enable fake-hwclock without systemctl
-mkdir -p /etc/systemd/system/multi-user.target.wants
-ln -sf /lib/systemd/system/fake-hwclock.service \
-  /etc/systemd/system/multi-user.target.wants/fake-hwclock.service || true
+enable_unit ssh.service
+enable_unit fake-hwclock.service
+enable_unit chrony.service
 
-mkdir -p /etc/systemd/system/multi-user.target.wants
-ln -sf /lib/systemd/system/chrony.service \
-  /etc/systemd/system/multi-user.target.wants/chrony.service || true
+echo \"built=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > /etc/rootfs-build-info
 
-echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
-
-# --- CRITICAL: sanitize image so first boot is truly first boot ---
+# --- sanitize image so first boot is truly first boot ---
 rm -rf /var/lib/cloud
 rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
 rm -f /etc/machine-id
