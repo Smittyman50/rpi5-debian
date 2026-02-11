@@ -77,6 +77,21 @@ if [[ "$want_boot" -eq 1 ]]; then
   tar -C "$FW_BOOT" -cpf - \
     start4.elf fixup4.dat kernel_2712.img bcm2712-rpi-5-b.dtb overlays \
     | zstd -19 -T0 -o dist/artifacts/pi-firmware.tar.zst
+
+  # Bundle kernel modules that match the Pi kernel we ship
+  FW_MOD="out/rpi-firmware/modules"
+  test -d "$FW_MOD" || { echo "Missing $FW_MOD"; exit 1; }
+
+  KVER="${KVER:-6.12.69-v8-16k+}"
+  test -d "$FW_MOD/$KVER" || {
+    echo "Missing modules for $KVER at $FW_MOD/$KVER"
+    echo "Available:"
+    ls -la "$FW_MOD" || true
+    exit 1
+  }
+
+  tar -C "$FW_MOD" -cpf - "$KVER" \
+    | zstd -19 -T0 -o dist/artifacts/pi-modules.tar.zst
 fi
 
 # -----------
