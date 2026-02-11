@@ -51,7 +51,6 @@ runcmd:
   - [ bash, -lc, "systemctl enable --now chrony" ]
   - [ bash, -lc, "chronyc -a tracking || true" ]
   - [ bash, -lc, "chronyc -a sources -v || true" ]
-
 {%- if docker | default(false) %}
   # Docker (only when docker:true)
   - [ bash, -lc, "install -m 0755 -d /etc/apt/keyrings" ]
@@ -63,7 +62,6 @@ runcmd:
   - [ bash, -lc, "systemctl enable --now docker" ]
   - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
 {% endif %}
-
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:
