@@ -23,6 +23,7 @@ package_update: true
 
 packages:
   - openssh-server
+  - chrony
 {% for p in packages %}
   - {{ p }}
 {% endfor %}
@@ -30,9 +31,31 @@ packages:
   - gnupg
 {% endif %}
 
+write_files:
+  - path: /etc/chrony/chrony.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      # Managed by cloud-init
+      # Use local/lab NTP first, then public fallbacks.
+      server 192.168.3.5 iburst prefer
+      pool pool.ntp.org iburst
+
+      # Drift file
+      driftfile /var/lib/chrony/chrony.drift
+
+      # Step the clock on startup if it's far off (important for Pi/no RTC)
+      makestep 1.0 10
+
+      # Log (optional but useful)
+      logdir /var/log/chrony
+      log tracking measurements statistics
+
 runcmd:
   - [ bash, -lc, "systemctl enable --now ssh || true" ]
-  - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
+  - [ bash, -lc, "systemctl enable --now chrony" ]
+  - [ bash, -lc, "chronyc -a tracking || true" ]
+  - [ bash, -lc, "chronyc -a sources -v || true" ]
 
 {%- if docker | default(false) %}
   # Docker (only when docker:true)
@@ -45,6 +68,8 @@ runcmd:
   - [ bash, -lc, "systemctl enable --now docker" ]
   - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
 {% endif %}
+
+  - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:
   mode: reboot
