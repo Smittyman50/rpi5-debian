@@ -69,7 +69,7 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Core packages for your image
 apt-get install -y --no-install-recommends \
   systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
-  fake-hwclock chrony
+  fake-hwclock chrony kmod iptables nftables
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
