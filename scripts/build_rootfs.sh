@@ -23,38 +23,45 @@ sudo chroot "$ROOTFS_DIR" /debootstrap/debootstrap --second-stage
 # --- prepare chroot runtime mounts (prevents /dev/pts + /proc warnings) ---
 sudo mkdir -p "$ROOTFS_DIR"/{proc,sys,dev,dev/pts,run}
 
-sudo mount -t proc proc "$ROOTFS_DIR/proc"
-sudo mount -t sysfs sys "$ROOTFS_DIR/sys"
-sudo mount --bind /dev "$ROOTFS_DIR/dev"
-# devpts mount can fail on some constrained runners; keep going if it does
-sudo mount -t devpts devpts "$ROOTFS_DIR/dev/pts" -o gid=5,mode=620 2>/dev/null || true
-# /run helps some postinst scripts; safe to ignore failure
-sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run" 2>/dev/null || true
+is_mounted() { mountpoint -q "$1" 2>/dev/null; }
 
 cleanup_mounts() {
   set +e
-  sudo umount -lf "$ROOTFS_DIR/dev/pts" 2>/dev/null || true
-  sudo umount -lf "$ROOTFS_DIR/dev"     2>/dev/null || true
-  sudo umount -lf "$ROOTFS_DIR/proc"    2>/dev/null || true
-  sudo umount -lf "$ROOTFS_DIR/sys"     2>/dev/null || true
-  sudo umount -lf "$ROOTFS_DIR/run"     2>/dev/null || true
+  # Unmount in reverse order
+  is_mounted "$ROOTFS_DIR/dev/pts" && sudo umount -lf "$ROOTFS_DIR/dev/pts"
+  is_mounted "$ROOTFS_DIR/dev"     && sudo umount -lf "$ROOTFS_DIR/dev"
+  is_mounted "$ROOTFS_DIR/proc"    && sudo umount -lf "$ROOTFS_DIR/proc"
+  is_mounted "$ROOTFS_DIR/sys"     && sudo umount -lf "$ROOTFS_DIR/sys"
+  is_mounted "$ROOTFS_DIR/run"     && sudo umount -lf "$ROOTFS_DIR/run"
+  true
 }
 trap cleanup_mounts EXIT
+
+# Mount only if not already mounted; tolerate failures where appropriate
+is_mounted "$ROOTFS_DIR/proc" || sudo mount -t proc  proc  "$ROOTFS_DIR/proc"
+is_mounted "$ROOTFS_DIR/sys"  || sudo mount -t sysfs sys   "$ROOTFS_DIR/sys"
+is_mounted "$ROOTFS_DIR/dev"  || sudo mount --bind /dev    "$ROOTFS_DIR/dev"
+
+# devpts can fail on some constrained runners; keep going if it does
+is_mounted "$ROOTFS_DIR/dev/pts" || sudo mount -t devpts devpts "$ROOTFS_DIR/dev/pts" -o gid=5,mode=620 2>/dev/null || true
+
+# /run helps some postinst scripts; safe to ignore failure
+is_mounted "$ROOTFS_DIR/run" || sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run" 2>/dev/null || true
 
 sudo chroot "$ROOTFS_DIR" bash -lc "
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
-# Use a safe UTF-8 locale during package installs (exists without generating locales)
+# Safe UTF-8 locale for noninteractive installs
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
 apt-get update
 
-# Install locales early so later postinst scripts stop complaining
+# Install locales early so postinst scripts stop complaining
 apt-get install -y --no-install-recommends locales
 
-# Generate and set default locale (adjust if you prefer en_GB, etc.)
+# Generate and set default locale (adjust if you prefer)
 sed -i 's/^# *\\(en_US.UTF-8 UTF-8\\)/\\1/' /etc/locale.gen
 locale-gen
 update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
@@ -72,7 +79,6 @@ date -u '+%Y-%m-%d %H:%M:%S' > /etc/fake-hwclock.data
 
 # Chrony config (Debian)
 mkdir -p /etc/chrony/conf.d
-
 cat >/etc/chrony/conf.d/10-local-sources.conf <<'EOF'
 server 192.168.3.5 iburst prefer
 pool pool.ntp.org iburst
@@ -80,7 +86,7 @@ makestep 1.0 -1
 rtcsync
 EOF
 
-# Ensure chrony.conf includes conf.d (usually does, but make it explicit if missing)
+# Ensure chrony.conf includes conf.d
 if ! grep -qE '^[[:space:]]*include[[:space:]]+/etc/chrony/conf.d/\\*\\.conf' /etc/chrony/chrony.conf 2>/dev/null; then
   echo 'include /etc/chrony/conf.d/*.conf' >> /etc/chrony/chrony.conf
 fi
@@ -111,7 +117,7 @@ rm -f /etc/machine-id
 rm -f /var/lib/dbus/machine-id
 "
 
-# tear down mounts BEFORE packaging
+# tear down mounts BEFORE packaging (prevents tar walking /proc)
 cleanup_mounts
 trap - EXIT
 
