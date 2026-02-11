@@ -2,7 +2,7 @@
 locale: en_US.UTF-8
 keyboard:
   layout: us
-timezone: America/New_York
+timezone: {{ timezone | default("UTC") }}
 
 users:
   - name: {{ username }}
