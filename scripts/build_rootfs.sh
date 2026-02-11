@@ -40,10 +40,15 @@ echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
 rm -rf /var/lib/cloud
 rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
 
+# inside your rootfs staging directory, e.g. $ROOT
+rm -f /var/lib/systemd/timesync/clock \
+      /var/lib/systemd/timesync/clock.* \
+      /var/lib/systemd/timesync/clock-* \
+      /etc/fake-hwclock.data \
+      /var/lib/fake-hwclock.data 2>/dev/null || true
+
 rm -f /etc/machine-id
 rm -f /var/lib/dbus/machine-id
-
-rm -f /var/lib/systemd/timesync/clock /var/lib/systemd/timesync/clock.* 2>/dev/null || true
 "
 
 sudo tar -C "$ROOTFS_DIR" -cpf - . | zstd -19 -T0 -o "$OUT_TAR"
