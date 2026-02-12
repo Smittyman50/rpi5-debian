@@ -42,7 +42,7 @@ write_files:
   - path: /etc/docker-roles.yml
     permissions: "0644"
     content: |
-      roles:
+      docker_roles:
 {% for r in roles %}
         - {{ r }}
 {% endfor %}
