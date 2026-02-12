@@ -9,5 +9,5 @@ pis:
     packages: [unattended-upgrades]
     timezone: "America/New_York"
     docker: true
-    roles: ["dns", "dhcp"]
+    roles: ["dns"]
     
