@@ -4,33 +4,30 @@ keyboard:
   layout: us
 timezone: {{ timezone | default("UTC") }}
 
-{% if pi.net is defined %}
+{% if net is defined and net %}
 network:
   version: 2
   ethernets:
-    {{ pi.net.ifname | default('end0') }}:
-      {% set ifcfg = (pi.net.ifname | default('end0')) %}
-    {% endif %}
+    {{ net.ifname | default('end0') }}:
+      dhcp4: {{ 'true' if (net.mode | default('dhcp')) == 'dhcp' else 'false' }}
+      dhcp6: {{ 'true' if (net.dhcp6 | default(false)) else 'false' }}
 
-      dhcp4: {{ 'true' if pi.net.mode | default('dhcp') == 'dhcp' else 'false' }}
-      dhcp6: {{ 'true' if (pi.net.dhcp6 | default(false)) else 'false' }}
-
-      {% if (pi.net.mode | default('dhcp')) == 'static' %}
+{% if (net.mode | default('dhcp')) == 'static' %}
       addresses:
-        - "{{ pi.net.address }}"
+        - "{{ net.address }}"
       routes:
         - to: default
-          via: "{{ pi.net.gateway }}"
-      {% if pi.net.dns is defined or pi.net.search is defined %}
+          via: "{{ net.gateway }}"
+{% if net.dns is defined or net.search is defined %}
       nameservers:
-        {% if pi.net.dns is defined %}
-        addresses: {{ pi.net.dns }}
-        {% endif %}
-        {% if pi.net.search is defined %}
-        search: {{ pi.net.search }}
-        {% endif %}
-      {% endif %}
-      {% endif %}
+{% if net.dns is defined %}
+        addresses: {{ net.dns }}
+{% endif %}
+{% if net.search is defined %}
+        search: {{ net.search }}
+{% endif %}
+{% endif %}
+{% endif %}
 {% endif %}
 
 users:
