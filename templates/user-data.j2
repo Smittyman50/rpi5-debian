@@ -4,6 +4,35 @@ keyboard:
   layout: us
 timezone: {{ timezone | default("UTC") }}
 
+{% if pi.net is defined %}
+network:
+  version: 2
+  ethernets:
+    {{ pi.net.ifname | default('end0') }}:
+      {% set ifcfg = (pi.net.ifname | default('end0')) %}
+    {% endif %}
+
+      dhcp4: {{ 'true' if pi.net.mode | default('dhcp') == 'dhcp' else 'false' }}
+      dhcp6: {{ 'true' if (pi.net.dhcp6 | default(false)) else 'false' }}
+
+      {% if (pi.net.mode | default('dhcp')) == 'static' %}
+      addresses:
+        - "{{ pi.net.address }}"
+      routes:
+        - to: default
+          via: "{{ pi.net.gateway }}"
+      {% if pi.net.dns is defined or pi.net.search is defined %}
+      nameservers:
+        {% if pi.net.dns is defined %}
+        addresses: {{ pi.net.dns }}
+        {% endif %}
+        {% if pi.net.search is defined %}
+        search: {{ pi.net.search }}
+        {% endif %}
+      {% endif %}
+      {% endif %}
+{% endif %}
+
 users:
   - name: {{ username }}
     sudo: ALL=(ALL) NOPASSWD:ALL
