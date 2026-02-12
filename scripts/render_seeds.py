@@ -37,8 +37,9 @@ for serial, cfg in pis.items():
     # Render user-data
     user = t_user.render(
         username=cfg.get("username", "smittyman"),
-        passwd_hash=cfg.get("passwd_hash", ""),     # <-- add this in pis.yml
-        docker=bool(cfg.get("docker", False)),      # <-- add/drive docker sections
+        passwd_hash=cfg.get("passwd_hash", ""),
+        docker=bool(cfg.get("docker", False)),
+        roles=cfg.get("roles", []) or [], 
         ssh_authorized_keys=cfg.get("ssh_authorized_keys", []) or [],
         packages=cfg.get("packages", []) or [],
         timezone=cfg.get("timezone", "UTC"),
