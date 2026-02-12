@@ -42,12 +42,12 @@ def normalize_net(cfg: dict) -> dict | None:
         if missing:
             raise ValueError(f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config")
 
-net = normalize_net(cfg)
-
 pis = inv.get("pis", {}) or {}
 for serial, cfg in pis.items():
     d = os.path.join(OUT_BASE, serial)
     os.makedirs(d, exist_ok=True)
+
+    net = normalize_net(cfg)
 
     # Render meta-data
     meta = t_meta.render(
