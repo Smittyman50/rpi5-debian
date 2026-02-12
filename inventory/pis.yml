@@ -1,6 +1,6 @@
 pis:
   "bf751bd2c30fa742":
-    hostname: "testpi"
+    hostname: "primus"
     username: "smittyman"
     passwd_hash: "***REMOVED***"
     ssh_authorized_keys:
