@@ -36,6 +36,18 @@ packages:
   - gnupg
 {% endif %}
 
+{# Write role list locally so the node is self-describing #}
+{% if roles %}
+write_files:
+  - path: /etc/docker-roles.yml
+    permissions: "0644"
+    content: |
+      roles:
+{% for r in roles %}
+        - {{ r }}
+{% endfor %}
+{% endif %}
+
 runcmd:
   - [ bash, -lc, "systemctl enable --now ssh || true" ]
 {%- if docker | default(false) %}
@@ -48,6 +60,10 @@ runcmd:
   - [ bash, -lc, "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ]
   - [ bash, -lc, "systemctl enable --now docker" ]
   - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
+{% endif %}
+{%- if docker | default(false) and roles %}
+  # Apply docker role bundles (public repo)
+  - [ bash, -lc, "ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
