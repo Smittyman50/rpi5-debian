@@ -35,12 +35,18 @@ def normalize_net(cfg: dict) -> dict | None:
 
     mode = net.get("mode")
     if mode not in ("dhcp", "static"):
-        raise ValueError(f"{cfg.get('hostname','<unknown>')}: net.mode must be dhcp|static (got {mode!r})")
+        raise ValueError(
+            f"{cfg.get('hostname','<unknown>')}: net.mode must be dhcp|static (got {mode!r})"
+        )
 
     if mode == "static":
         missing = [k for k in ("address", "gateway") if not net.get(k)]
         if missing:
-            raise ValueError(f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config")
+            raise ValueError(
+                f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config"
+            )
+
+    return net
 
 pis = inv.get("pis", {}) or {}
 for serial, cfg in pis.items():
