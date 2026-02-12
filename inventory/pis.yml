@@ -1,6 +1,13 @@
 pis:
   "bf751bd2c30fa742":
     hostname: "primus"
+    net:
+      ifname: end0
+      mode: static
+      address: 192.168.3.50/24
+      gateway: 192.168.3.1
+      dns: [192.168.3.10, 1.1.1.1]
+      search: [home.arpa]
     username: "smittyman"
     passwd_hash: "***REMOVED***"
     ssh_authorized_keys:
