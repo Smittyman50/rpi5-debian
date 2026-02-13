@@ -11,24 +11,28 @@ network:
     {{ net.ifname | default('end0') }}:
       dhcp4: {{ 'true' if (net.mode | default('dhcp')) == 'dhcp' else 'false' }}
       dhcp6: {{ 'true' if (net.dhcp6 | default(false)) else 'false' }}
-
 {% if (net.mode | default('dhcp')) == 'static' %}
       addresses:
         - {{ net.address }}
-      routes:
-        - to: 0.0.0.0/0
-          via: {{ net.gateway }}
+      gateway4: {{ net.gateway }}
+{% endif %}
 {% if net.dns is defined or net.search is defined %}
       nameservers:
 {% if net.dns is defined %}
-        addresses: {{ net.dns }}
+        addresses:
+{% for d in net.dns %}
+          - {{ d }}
+{% endfor %}
 {% endif %}
 {% if net.search is defined %}
-        search: {{ net.search }}
+        search:
+{% for s in net.search %}
+          - {{ s }}
+{% endfor %}
 {% endif %}
 {% endif %}
 {% endif %}
-{% endif %}
+
 
 users:
   - name: {{ username }}
