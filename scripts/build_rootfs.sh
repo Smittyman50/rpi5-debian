@@ -59,6 +59,21 @@ export LC_ALL=C.UTF-8
 
 apt-get update
 
+# ---- systemd unit enable/mask helpers (work in chroot without PID1) ----
+enable_unit() {
+  local u="$1"
+  mkdir -p /etc/systemd/system/multi-user.target.wants
+  ln -sf "/lib/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u" || true
+}
+
+mask_unit() {
+  local u="$1"
+  mkdir -p /etc/systemd/system
+  ln -sf /dev/null "/etc/systemd/system/$u" || true
+  # best-effort: remove any existing wants symlinks that may pull it in
+  find /etc/systemd/system -type l -name "$u" -path "*/wants/*" -delete 2>/dev/null || true
+}
+
 # Install locales early so postinst scripts stop complaining
 apt-get install -y --no-install-recommends locales
 
@@ -75,17 +90,18 @@ apt-get install -y --no-install-recommends \
 
 # Remove/disable ifupdown networking so it can't override netplan
 apt-get purge -y ifupdown || true
-systemctl disable --now networking.service 2>/dev/null || true
-systemctl mask networking.service 2>/dev/null || true
+mask_unit networking.service
 
 printf "auto lo\niface lo inet loopback\n" > /etc/network/interfaces
 rm -rf /etc/network/interfaces.d/* 2>/dev/null || true
 
-# Enable networkd/resolved and set resolv.conf symlink
-systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
+# Enable networkd/resolved and set resolv.conf symlink (do not rely on systemctl in chroot)
+enable_unit systemd-networkd.service
+enable_unit systemd-resolved.service
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
 
 # Prefer netplan renderer in cloud-init
+mkdir -p /etc/cloud/cloud.cfg.d
 cat > /etc/cloud/cloud.cfg.d/99-renderer.cfg <<'EOF'
 system_info:
   network:
@@ -94,25 +110,18 @@ EOF
 
 # --- FIRST BOOT DHCP BOOTSTRAP (so NoCloud HTTP seed can be fetched) ---
 
-# Ensure networkd/resolved are enabled (networkd comes with systemd on Debian)
-systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
+# Ensure networkd/resolved are enabled (do not rely on systemctl in chroot)
+enable_unit systemd-networkd.service
+enable_unit systemd-resolved.service
 
-# Allow wait-online, but cap it so we don't hang forever
-mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
-cat > /etc/systemd/system/systemd-networkd-wait-online.service.d/override.conf <<'EOF'
-[Service]
-TimeoutStartSec=20s
-EOF
-
-# Ensure it's enabled (cloud-init depends on network-online timing)
-systemctl enable systemd-networkd-wait-online.service 2>/dev/null || true
-
-# Ensure networkd and resolved are enabled for first boot
-systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
+# Do NOT allow wait-online to block boot (mask it hard)
+mask_unit systemd-networkd-wait-online.service
+mask_unit systemd-networkd-wait-online@.service
+rm -rf /etc/systemd/system/systemd-networkd-wait-online.service.d 2>/dev/null || true
 
 # Bootstrap DHCP on end0 for initial seed fetch
 mkdir -p /etc/systemd/network
-cat > /etc/systemd/network/10-bootstrap-dhcp-end0.network <<'EOF'
+cat > /etc/systemd/network/05-bootstrap-dhcp-end0.network <<'EOF'
 [Match]
 Name=end0
 
@@ -138,7 +147,7 @@ set -eu
 
 BOOTFINISHED="/var/lib/cloud/instance/boot-finished"
 NETPLAN_CI="/etc/netplan/50-cloud-init.yaml"
-BOOTSTRAP="/etc/systemd/network/10-bootstrap-dhcp-end0.network"
+BOOTSTRAP="/etc/systemd/network/05-bootstrap-dhcp-end0.network"
 
 # Only act after cloud-init completed at least once
 [ -e "$BOOTFINISHED" ] || exit 0
@@ -148,11 +157,12 @@ BOOTSTRAP="/etc/systemd/network/10-bootstrap-dhcp-end0.network"
 
 if [ -e "$BOOTSTRAP" ]; then
   rm -f "$BOOTSTRAP"
+  # Best-effort restart; if systemctl works at runtime, fine, otherwise just exit.
   systemctl restart systemd-networkd.service 2>/dev/null || true
 fi
 
-# Disable this service so it never runs again
-systemctl disable --now disable-bootstrap-dhcp.service 2>/dev/null || true
+# Disable the service by removing the wants symlink (works without systemctl)
+rm -f /etc/systemd/system/multi-user.target.wants/disable-bootstrap-dhcp.service 2>/dev/null || true
 exit 0
 EOF
 chmod 0755 /usr/local/sbin/disable-bootstrap-dhcp.sh
@@ -171,7 +181,7 @@ ExecStart=/usr/local/sbin/disable-bootstrap-dhcp.sh
 WantedBy=multi-user.target
 EOF
 
-systemctl enable disable-bootstrap-dhcp.service 2>/dev/null || true
+enable_unit disable-bootstrap-dhcp.service
 
 # Ensure ping works for non-root by setting cap_net_raw (stored in xattrs)
 if [ -x /usr/bin/ping ] && command -v setcap >/dev/null 2>&1; then
@@ -201,16 +211,6 @@ fi
 # Lock root account
 passwd -l root || true
 
-# Enable services (prefer systemctl; fallback to symlinks)
-enable_unit() {
-  u="$1"
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl enable "$u" >/dev/null 2>&1 && return 0
-  fi
-  mkdir -p /etc/systemd/system/multi-user.target.wants
-  ln -sf "/lib/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u" || true
-}
-
 enable_unit ssh.service
 enable_unit fake-hwclock.service
 enable_unit chrony.service
@@ -228,6 +228,31 @@ datasource:
 EOF
 
 echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
+
+# ---- Fix netplan "permissions too open" by forcing cloud-init to write secure perms ----
+mkdir -p /etc/systemd/system/cloud-init.service.d
+cat > /etc/systemd/system/cloud-init.service.d/umask.conf <<'EOF'
+[Service]
+UMask=0077
+EOF
+
+mkdir -p /etc/systemd/system/cloud-init-local.service.d
+cat > /etc/systemd/system/cloud-init-local.service.d/umask.conf <<'EOF'
+[Service]
+UMask=0077
+EOF
+
+mkdir -p /etc/systemd/system/cloud-config.service.d
+cat > /etc/systemd/system/cloud-config.service.d/umask.conf <<'EOF'
+[Service]
+UMask=0077
+EOF
+
+mkdir -p /etc/systemd/system/cloud-final.service.d
+cat > /etc/systemd/system/cloud-final.service.d/umask.conf <<'EOF'
+[Service]
+UMask=0077
+EOF
 
 # --- sanitize image so first boot is truly first boot ---
 rm -rf /var/lib/cloud
