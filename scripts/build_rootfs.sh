@@ -97,15 +97,27 @@ EOF
 # Ensure networkd/resolved are enabled (networkd comes with systemd on Debian)
 systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
 
-# Never allow wait-online to hang the box if networking is misconfigured
-systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
-systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
+# Allow wait-online, but cap it so we don't hang forever
+mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
+cat > /etc/systemd/system/systemd-networkd-wait-online.service.d/override.conf <<'EOF'
+[Service]
+TimeoutStartSec=20s
+EOF
+
+# Ensure it's enabled (cloud-init depends on network-online timing)
+systemctl enable systemd-networkd-wait-online.service 2>/dev/null || true
+
+# Ensure networkd and resolved are enabled for first boot
+systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
 
 # Bootstrap DHCP on end0 for initial seed fetch
 mkdir -p /etc/systemd/network
 cat > /etc/systemd/network/10-bootstrap-dhcp-end0.network <<'EOF'
 [Match]
 Name=end0
+
+[Link]
+RequiredForOnline=yes
 
 [Network]
 DHCP=ipv4
