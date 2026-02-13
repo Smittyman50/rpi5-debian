@@ -69,7 +69,30 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Core packages for your image
 apt-get install -y --no-install-recommends \
   systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
+  systemd-networkd systemd-resolved \
   fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
+
+# Ensure netplan backend is available
+apt-get install -y --no-install-recommends systemd-networkd systemd-resolved
+
+# Remove/disable ifupdown networking so it can't override netplan
+apt-get purge -y ifupdown || true
+systemctl disable --now networking.service 2>/dev/null || true
+systemctl mask networking.service 2>/dev/null || true
+
+printf "auto lo\niface lo inet loopback\n" > /etc/network/interfaces
+rm -rf /etc/network/interfaces.d/* 2>/dev/null || true
+
+# Enable networkd/resolved and set resolv.conf symlink
+systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
+
+# Prefer netplan renderer in cloud-init
+cat > /etc/cloud/cloud.cfg.d/99-renderer.cfg <<'EOF'
+system_info:
+  network:
+    renderers: ['netplan']
+EOF
 
 # Ensure ping works for non-root by setting cap_net_raw (stored in xattrs)
 if [ -x /usr/bin/ping ] && command -v setcap >/dev/null 2>&1; then
