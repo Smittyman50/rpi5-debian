@@ -14,10 +14,10 @@ network:
 
 {% if (net.mode | default('dhcp')) == 'static' %}
       addresses:
-        - "{{ net.address }}"
+        - {{ net.address }}
       routes:
-        - to: default
-          via: "{{ net.gateway }}"
+        - to: 0.0.0.0/0
+          via: {{ net.gateway }}
 {% if net.dns is defined or net.search is defined %}
       nameservers:
 {% if net.dns is defined %}
