@@ -114,16 +114,41 @@ EOF
 enable_unit systemd-networkd.service
 enable_unit systemd-resolved.service
 
-# Do NOT allow wait-online to block boot (mask it hard)
-mask_unit systemd-networkd-wait-online.service
-mask_unit systemd-networkd-wait-online@.service
-rm -rf /etc/systemd/system/systemd-networkd-wait-online.service.d 2>/dev/null || true
+# Allow wait-online, but cap it so we don't hang forever
+# (NoCloudNet needs a real IPv4 before cloud-init tries to fetch seed)
+mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
+cat > /etc/systemd/system/systemd-networkd-wait-online.service.d/override.conf <<'EOF'
+[Service]
+TimeoutStartSec=20s
+EOF
+
+enable_unit systemd-networkd-wait-online.service
+
+# Make cloud-init-local wait for network-online (provided by wait-online)
+mkdir -p /etc/systemd/system/cloud-init-local.service.d
+cat > /etc/systemd/system/cloud-init-local.service.d/network-online.conf <<'EOF'
+[Unit]
+Wants=network-online.target
+After=network-online.target
+EOF
+
+# (Optional but recommended) Also apply to cloud-init.service
+mkdir -p /etc/systemd/system/cloud-init.service.d
+cat > /etc/systemd/system/cloud-init.service.d/network-online.conf <<'EOF'
+[Unit]
+Wants=network-online.target
+After=network-online.target
+EOF
 
 # Bootstrap DHCP on end0 for initial seed fetch
 mkdir -p /etc/systemd/network
-cat > /etc/systemd/network/05-bootstrap-dhcp-end0.network <<'EOF'
+cat > /etc/systemd/network/05-bootstrap-dhcp.network <<'EOF'
 [Match]
-Name=end0
+# Most robust: match the Pi ethernet driver
+Driver=bcmgenet
+
+# If Driver match ever fails for your kernel, fall back to names:
+# Name=end0 eth0
 
 [Link]
 RequiredForOnline=yes
@@ -133,7 +158,7 @@ DHCP=ipv4
 IPv6AcceptRA=yes
 
 [DHCPv4]
-UseDNS=false
+UseDNS=true
 UseRoutes=true
 EOF
 
@@ -147,7 +172,7 @@ set -eu
 
 BOOTFINISHED="/var/lib/cloud/instance/boot-finished"
 NETPLAN_CI="/etc/netplan/50-cloud-init.yaml"
-BOOTSTRAP="/etc/systemd/network/05-bootstrap-dhcp-end0.network"
+BOOTSTRAP="/etc/systemd/network/05-bootstrap-dhcp.network"
 
 # Only act after cloud-init completed at least once
 [ -e "$BOOTFINISHED" ] || exit 0
