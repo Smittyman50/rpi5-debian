@@ -48,8 +48,7 @@ is_mounted "$ROOTFS_DIR/dev/pts" || sudo mount -t devpts devpts "$ROOTFS_DIR/dev
 # /run helps some postinst scripts; safe to ignore failure
 is_mounted "$ROOTFS_DIR/run" || sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run" 2>/dev/null || true
 
-# --- CHROOT CONFIG (fed via single-quoted heredoc to prevent host-side $ expansion) ---
-sudo chroot "$ROOTFS_DIR" bash -s <<'CHROOT'
+sudo chroot "$ROOTFS_DIR" bash -lc "
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
@@ -63,7 +62,7 @@ apt-get update
 apt-get install -y --no-install-recommends locales
 
 # Generate and set default locale (adjust if you prefer)
-sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+sed -i 's/^# *\\(en_US.UTF-8 UTF-8\\)/\\1/' /etc/locale.gen
 locale-gen
 update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
@@ -182,7 +181,7 @@ rtcsync
 EOF
 
 # Ensure chrony.conf includes conf.d
-if ! grep -qE '^[[:space:]]*include[[:space:]]+/etc/chrony/conf.d/\*\.conf' /etc/chrony/chrony.conf 2>/dev/null; then
+if ! grep -qE '^[[:space:]]*include[[:space:]]+/etc/chrony/conf.d/\\*\\.conf' /etc/chrony/chrony.conf 2>/dev/null; then
   echo 'include /etc/chrony/conf.d/*.conf' >> /etc/chrony/chrony.conf
 fi
 
@@ -191,12 +190,12 @@ passwd -l root || true
 
 # Enable services (prefer systemctl; fallback to symlinks)
 enable_unit() {
-  u="$1"
+  u=\"\$1\"
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl enable "$u" >/dev/null 2>&1 && return 0
+    systemctl enable \"\$u\" >/dev/null 2>&1 && return 0
   fi
   mkdir -p /etc/systemd/system/multi-user.target.wants
-  ln -sf "/lib/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u" || true
+  ln -sf \"/lib/systemd/system/\$u\" \"/etc/systemd/system/multi-user.target.wants/\$u\" || true
 }
 
 enable_unit ssh.service
@@ -215,14 +214,14 @@ datasource:
   RightScale: {enabled: false}
 EOF
 
-echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
+echo \"built=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > /etc/rootfs-build-info
 
 # --- sanitize image so first boot is truly first boot ---
 rm -rf /var/lib/cloud
 rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
 rm -f /etc/machine-id
 rm -f /var/lib/dbus/machine-id
-CHROOT
+"
 
 # tear down mounts BEFORE packaging (prevents tar walking /proc)
 cleanup_mounts
