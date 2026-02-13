@@ -69,7 +69,7 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Core packages for your image
 apt-get install -y --no-install-recommends \
   systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
-  systemd systemd-resolved fake-hwclock chrony kmod iptables nftables \
+  systemd-resolved fake-hwclock chrony kmod iptables nftables \
   iputils-ping libcap2-bin
 
 # Remove/disable ifupdown networking so it can't override netplan
@@ -90,6 +90,75 @@ system_info:
   network:
     renderers: ['netplan']
 EOF
+
+# --- FIRST BOOT DHCP BOOTSTRAP (so NoCloud HTTP seed can be fetched) ---
+
+# Ensure networkd/resolved are enabled (networkd comes with systemd on Debian)
+systemctl enable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
+
+# Never allow wait-online to hang the box if networking is misconfigured
+systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
+systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
+
+# Bootstrap DHCP on end0 for initial seed fetch
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/10-bootstrap-dhcp-end0.network <<'EOF'
+[Match]
+Name=end0
+
+[Network]
+DHCP=ipv4
+IPv6AcceptRA=yes
+
+[DHCPv4]
+UseDNS=false
+UseRoutes=true
+EOF
+
+# Make sure resolv.conf points at resolved (safe even if you later override)
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
+
+# After cloud-init succeeds (boot-finished + netplan exists), remove bootstrap DHCP
+cat > /usr/local/sbin/disable-bootstrap-dhcp.sh <<'EOF'
+#!/bin/sh
+set -eu
+
+BOOTFINISHED="/var/lib/cloud/instance/boot-finished"
+NETPLAN_CI="/etc/netplan/50-cloud-init.yaml"
+BOOTSTRAP="/etc/systemd/network/10-bootstrap-dhcp-end0.network"
+
+# Only act after cloud-init completed at least once
+[ -e "$BOOTFINISHED" ] || exit 0
+
+# Only remove bootstrap if cloud-init actually produced netplan
+[ -s "$NETPLAN_CI" ] || exit 0
+
+if [ -e "$BOOTSTRAP" ]; then
+  rm -f "$BOOTSTRAP"
+  systemctl restart systemd-networkd.service 2>/dev/null || true
+fi
+
+# Disable this service so it never runs again
+systemctl disable --now disable-bootstrap-dhcp.service 2>/dev/null || true
+exit 0
+EOF
+chmod 0755 /usr/local/sbin/disable-bootstrap-dhcp.sh
+
+cat > /etc/systemd/system/disable-bootstrap-dhcp.service <<'EOF'
+[Unit]
+Description=Disable first-boot DHCP bootstrap after cloud-init finishes
+After=cloud-final.service
+Wants=cloud-final.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/disable-bootstrap-dhcp.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable disable-bootstrap-dhcp.service 2>/dev/null || true
 
 # Ensure ping works for non-root by setting cap_net_raw (stored in xattrs)
 if [ -x /usr/bin/ping ] && command -v setcap >/dev/null 2>&1; then
