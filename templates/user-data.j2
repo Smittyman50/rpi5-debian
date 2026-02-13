@@ -4,6 +4,32 @@ keyboard:
   layout: us
 timezone: {{ timezone | default("UTC") }}
 
+{% if net is defined and net %}
+network:
+  version: 2
+  ethernets:
+    {{ net.ifname | default('end0') }}:
+      dhcp4: {{ 'true' if (net.mode | default('dhcp')) == 'dhcp' else 'false' }}
+      dhcp6: {{ 'true' if (net.dhcp6 | default(false)) else 'false' }}
+
+{% if (net.mode | default('dhcp')) == 'static' %}
+      addresses:
+        - "{{ net.address }}"
+      routes:
+        - to: default
+          via: "{{ net.gateway }}"
+{% if net.dns is defined or net.search is defined %}
+      nameservers:
+{% if net.dns is defined %}
+        addresses: {{ net.dns }}
+{% endif %}
+{% if net.search is defined %}
+        search: {{ net.search }}
+{% endif %}
+{% endif %}
+{% endif %}
+{% endif %}
+
 users:
   - name: {{ username }}
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -42,7 +68,7 @@ write_files:
   - path: /etc/docker-roles.yml
     permissions: "0644"
     content: |
-      roles:
+      docker_roles:
 {% for r in roles %}
         - {{ r }}
 {% endfor %}
@@ -53,7 +79,9 @@ runcmd:
 {%- if docker | default(false) %}
   # Docker (only when docker:true)
   - [ bash, -lc, "install -m 0755 -d /etc/apt/keyrings" ]
-  - [ bash, -lc, "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg" ]
+  - [ bash, -lc, "curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg" ]
+  - [ bash, -lc, "gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg" ]
+  - [ bash, -lc, "rm -f /tmp/docker.gpg" ]
   - [ bash, -lc, "chmod a+r /etc/apt/keyrings/docker.gpg" ]
   - [ bash, -lc, "echo 'deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable' > /etc/apt/sources.list.d/docker.list" ]
   - [ bash, -lc, "apt-get update" ]
@@ -63,6 +91,7 @@ runcmd:
 {% endif %}
 {%- if docker | default(false) and roles %}
   # Apply docker role bundles (public repo)
+  - [ bash, -lc, "command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
   - [ bash, -lc, "ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
   - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
