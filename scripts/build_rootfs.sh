@@ -69,11 +69,8 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Core packages for your image
 apt-get install -y --no-install-recommends \
   systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
-  systemd-networkd systemd-resolved \
-  fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
-
-# Ensure netplan backend is available
-apt-get install -y --no-install-recommends systemd-networkd systemd-resolved
+  systemd systemd-resolved fake-hwclock chrony kmod iptables nftables \
+  iputils-ping libcap2-bin
 
 # Remove/disable ifupdown networking so it can't override netplan
 apt-get purge -y ifupdown || true
