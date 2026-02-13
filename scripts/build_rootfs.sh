@@ -69,7 +69,12 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Core packages for your image
 apt-get install -y --no-install-recommends \
   systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
-  fake-hwclock chrony kmod iptables nftables
+  fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
+
+# Ensure ping works for non-root by setting cap_net_raw (stored in xattrs)
+if [ -x /usr/bin/ping ] && command -v setcap >/dev/null 2>&1; then
+  setcap cap_net_raw+ep /usr/bin/ping || true
+fi
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
@@ -134,5 +139,6 @@ cleanup_mounts
 trap - EXIT
 
 # Create compressed artifact
-sudo tar -C "$ROOTFS_DIR" -cpf - . | zstd -19 -T0 -o "$OUT_TAR"
+sudo tar --xattrs --acls --numeric-owner -C "$ROOTFS_DIR" -cpf - . \
+  | zstd -19 -T0 -o "$OUT_TAR"
 echo "Wrote $OUT_TAR"
