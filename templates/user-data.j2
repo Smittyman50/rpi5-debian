@@ -1,12 +1,13 @@
 #cloud-config
 locale: en_US.UTF-8
-keyboard:
-  layout: us
 timezone: {{ timezone | default("UTC") }}
+
+{# NOTE: Do NOT include "keyboard:" here. On minimal images it can cause cloud-config.service to fail. #}
 
 {% if net is defined and net %}
 network:
   version: 2
+  renderer: networkd
   ethernets:
     {{ net.ifname | default('end0') }}:
       dhcp4: {{ 'true' if (net.mode | default('dhcp')) == 'dhcp' else 'false' }}
@@ -78,26 +79,43 @@ write_files:
 {% endif %}
 
 runcmd:
-  - [ bash, -lc, "systemctl enable --now ssh || true" ]
+  # 1) Make sure SSH is on early
+  - [ bash, -lc, "set -euo pipefail; systemctl enable --now ssh || true" ]
+
 {%- if docker | default(false) %}
-  # Docker (only when docker:true)
-  - [ bash, -lc, "install -m 0755 -d /etc/apt/keyrings" ]
-  - [ bash, -lc, "curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg" ]
-  - [ bash, -lc, "gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg" ]
-  - [ bash, -lc, "rm -f /tmp/docker.gpg" ]
-  - [ bash, -lc, "chmod a+r /etc/apt/keyrings/docker.gpg" ]
-  - [ bash, -lc, "echo 'deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable' > /etc/apt/sources.list.d/docker.list" ]
-  - [ bash, -lc, "apt-get update" ]
-  - [ bash, -lc, "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ]
-  - [ bash, -lc, "systemctl enable --now docker" ]
-  - [ bash, -lc, "usermod -aG docker {{ username }} || true" ]
+  # 2) Docker install (while ifupdown DHCP is still providing stable connectivity)
+  - [ bash, -lc, "set -euo pipefail; install -m 0755 -d /etc/apt/keyrings" ]
+  - [ bash, -lc, "set -euo pipefail; curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg" ]
+  - [ bash, -lc, "set -euo pipefail; gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg" ]
+  - [ bash, -lc, "set -euo pipefail; rm -f /tmp/docker.gpg" ]
+  - [ bash, -lc, "set -euo pipefail; chmod a+r /etc/apt/keyrings/docker.gpg" ]
+  - [ bash, -lc, "set -euo pipefail; echo 'deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable' > /etc/apt/sources.list.d/docker.list" ]
+  - [ bash, -lc, "set -euo pipefail; apt-get update" ]
+  - [ bash, -lc, "set -euo pipefail; apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ]
+  - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
+  - [ bash, -lc, "set -euo pipefail; usermod -aG docker {{ username }} || true" ]
 {% endif %}
+
 {%- if docker | default(false) and roles %}
-  # Apply docker role bundles (public repo)
-  - [ bash, -lc, "command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
-  - [ bash, -lc, "ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
+  # 3) Apply docker role bundles (still on stable ifupdown connectivity)
+  - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
+  - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
-  - [ bash, -lc, "echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
+
+  # 4) Mark provisioning complete
+  - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
+
+  # 5) LAST: switch from ifupdown bootstrap -> netplan/networkd (no live netplan apply; reboot will cleanly switch)
+  - [ bash, -lc, "set -euo pipefail; echo '[cloud-init] switching networking from ifupdown to netplan+networkd' | systemd-cat -t cloud-init || true" ]
+
+  # Enable the target stack for next boot
+  - [ bash, -lc, "set -euo pipefail; systemctl enable systemd-networkd systemd-resolved || true" ]
+  - [ bash, -lc, "set -euo pipefail; ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true" ]
+
+  # Disable/remove ifupdown so it cannot interfere on next boot
+  - [ bash, -lc, "set -euo pipefail; systemctl disable networking.service || true" ]
+  - [ bash, -lc, "set -euo pipefail; rm -f /etc/network/interfaces; rm -rf /etc/network/interfaces.d || true" ]
+  - [ bash, -lc, "set -euo pipefail; apt-get purge -y ifupdown || true" ]
 
 power_state:
   mode: reboot
