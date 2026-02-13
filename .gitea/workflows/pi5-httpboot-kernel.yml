@@ -43,6 +43,12 @@ jobs:
           chmod +x scripts/fetch_rpi_firmware.sh
           scripts/fetch_rpi_firmware.sh
 
+      - name: Patch Pi 5 DTB (remove chosen bootargs)
+        run: |
+          set -euo pipefail
+          chmod +x scripts/patch_pi5_dtb.sh
+          scripts/patch_pi5_dtb.sh
+
       - name: Build Debian rootfs (arm64)
         run: |
           set -euo pipefail

@@ -14,17 +14,19 @@ trap 'rm -rf "$TMPD"' EXIT
 
 DTS="$TMPD/in.dts"
 DTS2="$TMPD/out.dts"
-DTB_OUT="$TMPD/out.dtb"
+DTB2="$TMPD/out.dtb"
 
+# Decompile
 dtc -I dtb -O dts -o "$DTS" "$DTB"
 
-# Remove any 'bootargs = "...";' line(s) in the chosen node.
-# This is intentionally simple; if you want structural editing, we can do that too.
+# Remove any chosen bootargs assignment line(s)
+# This targets lines like: bootargs = "...";
 sed -E '/^\s*bootargs\s*=\s*".*";\s*$/d' "$DTS" > "$DTS2"
 
-dtc -I dts -O dtb -o "$DTB_OUT" "$DTS2"
+# Recompile
+dtc -I dts -O dtb -o "$DTB2" "$DTS2"
 
 # Replace original
-cp -f "$DTB_OUT" "$DTB"
+cp -f "$DTB2" "$DTB"
 
-echo "Patched DTB (removed chosen/bootargs): $DTB"
+echo "Patched DTB: removed chosen/bootargs from $DTB"
