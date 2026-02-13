@@ -125,30 +125,28 @@ EOF
 enable_unit systemd-networkd-wait-online.service
 
 # Make cloud-init-local wait for network-online (provided by wait-online)
-mkdir -p /etc/systemd/system/cloud-init-local.service.d
-cat > /etc/systemd/system/cloud-init-local.service.d/network-online.conf <<'EOF'
-[Unit]
-Wants=network-online.target
-After=network-online.target
-EOF
+# mkdir -p /etc/systemd/system/cloud-init-local.service.d
+# cat > /etc/systemd/system/cloud-init-local.service.d/network-online.conf <<'EOF'
+# [Unit]
+# Wants=network-online.target
+# After=network-online.target
+# EOF
 
 # (Optional but recommended) Also apply to cloud-init.service
-mkdir -p /etc/systemd/system/cloud-init.service.d
-cat > /etc/systemd/system/cloud-init.service.d/network-online.conf <<'EOF'
-[Unit]
-Wants=network-online.target
-After=network-online.target
-EOF
+# mkdir -p /etc/systemd/system/cloud-init.service.d
+# cat > /etc/systemd/system/cloud-init.service.d/network-online.conf <<'EOF'
+# [Unit]
+# Wants=network-online.target
+# After=network-online.target
+# EOF
 
 # Bootstrap DHCP on end0 for initial seed fetch
 mkdir -p /etc/systemd/network
 cat > /etc/systemd/network/05-bootstrap-dhcp.network <<'EOF'
 [Match]
-# Most robust: match the Pi ethernet driver
-Driver=bcmgenet
-
-# If Driver match ever fails for your kernel, fall back to names:
-# Name=end0 eth0
+Name=end0
+Name=eth0
+Name=en*
 
 [Link]
 RequiredForOnline=yes
