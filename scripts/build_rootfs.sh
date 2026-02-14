@@ -90,7 +90,7 @@ source /etc/network/interfaces.d/*.cfg
 EOF
 
 cat > /etc/network/interfaces.d/10-end0-dhcp.cfg <<'EOF'
-allow-hotplug end0
+auto end0
 iface end0 inet dhcp
 EOF
 
