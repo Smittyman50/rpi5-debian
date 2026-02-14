@@ -48,7 +48,7 @@ write_files:
 
 runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now ssh || true" ]
-{%- if docker | default(false) %}
+{% if docker | default(false) %}
 {# Docker install #}
   - [ bash, -lc, "set -euo pipefail; install -m 0755 -d /etc/apt/keyrings" ]
   - [ bash, -lc, "set -euo pipefail; curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg" ]
@@ -61,7 +61,7 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
   - [ bash, -lc, "set -euo pipefail; usermod -aG docker {{ username }} || true" ]
 {% endif %}
-{%- if docker | default(false) and roles %}
+{% if docker | default(false) and roles %}
 {# Apply docker role bundles #}
   - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
