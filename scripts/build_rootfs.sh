@@ -9,7 +9,7 @@ ROOTFS_DIR="${ROOTFS_DIR:-out/rootfs}"
 OUT_TAR="${OUT_TAR:-out/artifacts/debian-bookworm-arm64-rootfs.tar.zst}"
 
 FALLBACK_USER="smittyman"
-FALLBACK_PASSWD_HASH=`***REMOVED***`
+FALLBACK_PASSWD_HASH='***REMOVED***'
 
 mkdir -p out/artifacts
 rm -rf "$ROOTFS_DIR"
