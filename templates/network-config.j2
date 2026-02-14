@@ -1,6 +1,3 @@
-# This file is consumed by cloud-init NoCloud/NoCloudNet as "network-config"
-# It is written into /etc/network/interfaces.d/20-static.cfg (via cloud-init ENI renderer)
-
 auto {{ net.ifname | default('end0') }}
 iface {{ net.ifname | default('end0') }} inet {% if (net.mode | default('dhcp')) == 'static' %}static{% else %}dhcp{% endif %}
 {% if net.mac is defined and net.mac %}
@@ -8,9 +5,7 @@ iface {{ net.ifname | default('end0') }} inet {% if (net.mode | default('dhcp'))
 {% endif %}
 {% if (net.mode | default('dhcp')) == 'static' %}
     address {{ net.address.split('/')[0] if '/' in net.address else net.address }}
-{% if '/' in net.address %}
-    netmask {{ '255.255.255.0' }}
-{% endif %}
+    netmask {{ net.netmask | default('255.255.255.0') }}
     gateway {{ net.gateway }}
 {% if net.dns is defined and net.dns %}
     dns-nameservers{% for d in net.dns %} {{ d }}{% endfor %}
