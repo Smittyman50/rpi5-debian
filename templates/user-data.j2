@@ -27,6 +27,7 @@ packages:
   - git
   - python3
   - duf
+  - ifupdown
 {% for p in packages %}
   - {{ p }}
 {% endfor %}
@@ -34,7 +35,6 @@ packages:
   - gnupg
 {% endif %}
 
-{# Write role list locally so the node is self-describing #}
 {% if roles %}
 write_files:
   - path: /etc/docker-roles.yml
@@ -48,8 +48,8 @@ write_files:
 
 runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now ssh || true" ]
+
 {% if docker | default(false) %}
-{# Docker install #}
   - [ bash, -lc, "set -euo pipefail; install -m 0755 -d /etc/apt/keyrings" ]
   - [ bash, -lc, "set -euo pipefail; curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg" ]
   - [ bash, -lc, "set -euo pipefail; gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg" ]
@@ -61,20 +61,18 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
   - [ bash, -lc, "set -euo pipefail; usermod -aG docker {{ username }} || true" ]
 {% endif %}
+
 {% if docker | default(false) and roles %}
-{# Apply docker role bundles #}
   - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
-  - [ bash, -lc, "set -euo pipefail; echo '[cloud-init] switching networking from ifupdown to netplan+networkd' | systemd-cat -t cloud-init || true" ]
-{# Enable the target stack for next boot #}
-  - [ bash, -lc, "set -euo pipefail; systemctl enable systemd-networkd systemd-resolved || true" ]
-  - [ bash, -lc, "set -euo pipefail; ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true" ]
-{# Disable/remove ifupdown so it cannot interfere on next boot #}
-  - [ bash, -lc, "set -euo pipefail; systemctl disable networking.service || true" ]
-  - [ bash, -lc, "set -euo pipefail; rm -f /etc/network/interfaces; rm -rf /etc/network/interfaces.d || true" ]
-  - [ bash, -lc, "set -euo pipefail; apt-get purge -y ifupdown || true" ]
-{# Mark provisioning complete #}
+
+  # --- Apply static ifupdown config from network-config seed ---
+  # network-config is written by cloud-init datasource as /etc/network/interfaces.d/20-static.cfg (see template below)
+  - [ bash, -lc, "set -euo pipefail; test -f /etc/network/interfaces.d/20-static.cfg || { echo 'Missing /etc/network/interfaces.d/20-static.cfg from network-config' | systemd-cat -t cloud-init; exit 1; }" ]
+  - [ bash, -lc, "set -euo pipefail; rm -f /etc/network/interfaces.d/10-end0-dhcp.cfg || true" ]
+  - [ bash, -lc, "set -euo pipefail; systemctl restart networking || (ifdown --force end0 || true; ifup end0 || true)" ]
+
   - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:

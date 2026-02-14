@@ -1,14 +1,8 @@
 #!/bin/sh
 #
 # Pi 5 HTTP-boot installer init (PID 1)
-# - Brings up network (DHCP)
-# - Partitions + formats NVMe (GPT: BOOT vfat + ROOT ext4)
-# - Installs Debian rootfs + Pi firmware bundle
-# - Writes cmdline.txt using ROOT *PARTUUID* (more robust at early boot)
-# - Writes fstab using filesystem UUIDs
 #
 
-# PID 1 must not die silently; keep control on failure.
 set -u
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
@@ -21,13 +15,10 @@ die(){ log "FATAL: $*"; exec sh; }
 
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; }
 
-# --- Minimal filesystem setup ---
 mkdir -p /proc /sys /dev /run /tmp /mnt/root
-
 mount -t proc  proc /proc  2>/dev/null || true
 mount -t sysfs sys  /sys   2>/dev/null || true
 
-# devtmpfs (retry briefly; early boot can race)
 i=0
 while ! mount -t devtmpfs dev /dev 2>/dev/null; do
   i=$((i+1))
@@ -35,19 +26,15 @@ while ! mount -t devtmpfs dev /dev 2>/dev/null; do
   sleep 0.1
 done
 
-# Basic device nodes (avoid surprises)
 [ -c /dev/console ] || mknod -m 600 /dev/console c 5 1 2>/dev/null || true
 [ -c /dev/null ]    || mknod -m 666 /dev/null    c 1 3 2>/dev/null || true
 [ -c /dev/kmsg ]    || mknod -m 600 /dev/kmsg    c 1 11 2>/dev/null || true
 
-# Loopback (not strictly required, but helps some DHCP clients)
 ip link set lo up 2>/dev/null || true
 
-# --- Network: DHCP on eth0 (dhclient preferred; fallback to udhcpc) ---
 log "DHCP on eth0..."
 ip link set eth0 up 2>/dev/null || true
 
-# Wait a moment for link/carrier if ethtool exists; otherwise just proceed.
 if command -v ethtool >/dev/null 2>&1; then
   j=0
   while :; do
@@ -58,91 +45,61 @@ if command -v ethtool >/dev/null 2>&1; then
   done
 fi
 
-# If dhclient is present, make it deterministic in initramfs contexts.
 if command -v dhclient >/dev/null 2>&1; then
   rm -f /run/dhclient.* /var/lib/dhcp/dhclient.* 2>/dev/null || true
   dhclient -4 -v -1 -pf /run/dhclient.pid -lf /run/dhclient.leases eth0 \
     || die "DHCP failed (dhclient)"
 elif command -v udhcpc >/dev/null 2>&1; then
-  # -n: exit if lease fails; -q: quiet-ish; -f: run in foreground
   udhcpc -i eth0 -n -q -f || die "DHCP failed (udhcpc)"
 else
   die "No DHCP client found (need dhclient or udhcpc)"
 fi
 
-# Ensure DNS is present (some initramfs DHCP clients may not write resolv.conf)
 if [ ! -s /etc/resolv.conf ]; then
   warn "/etc/resolv.conf is empty; writing a temporary resolver"
   echo "nameserver 192.168.3.3" > /etc/resolv.conf
 fi
 
 log "Synchronizing time (pre-cloud-init)..."
-log "Time before: $(date -R 2>/dev/null || date)"
+EPOCH=""
+if command -v curl >/dev/null 2>&1; then
+  EPOCH="$(curl -fsS http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
+elif command -v wget >/dev/null 2>&1; then
+  EPOCH="$(wget -qO- http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
+fi
+case "$EPOCH" in
+  ''|*[!0-9]*) warn "Epoch fetch failed/invalid: ${EPOCH:-<empty>}" ;;
+  *) date -u -s "@$EPOCH" || true ;;
+esac
 
-# Epoch Timesync----
-  EPOCH=""
-  if command -v curl >/dev/null 2>&1; then
-    EPOCH="$(curl -fsS http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
-  elif command -v wget >/dev/null 2>&1; then
-    EPOCH="$(wget -qO- http://192.168.3.26/rpi/httpboot/time 2>/dev/null || true)"
-  fi
-
-  case "$EPOCH" in
-    ''|*[!0-9]*)
-      warn "Epoch fetch failed/invalid: ${EPOCH:-<empty>}"
-      ;;
-    *)
-      date -u -s "@$EPOCH" || true
-      log "Time after epoch set: $(date -R 2>/dev/null || date)"
-      ;;
-  esac
-
-# --- Identify Pi (serial) ---
 SERIAL="$(awk '/^Serial/ {print $3}' /proc/cpuinfo 2>/dev/null | tail -n1)"
 [ -n "${SERIAL:-}" ] || die "No Serial found in /proc/cpuinfo"
 log "Serial: $SERIAL"
 
-# --- Config: HTTP endpoints ---
-HTTP_BASE="http://192.168.3.26/rpi/httpboot"   # replaced by CI via sed
+HTTP_BASE="http://192.168.3.26/rpi/httpboot"
 ART="${HTTP_BASE}/artifacts"
 SEED="${HTTP_BASE}/seeds/${SERIAL}"
 
-# --- Fetch helper (curl preferred; fallback to wget) ---
 fetch() {
-  url="$1"
-  out="$2"
+  url="$1"; out="$2"
   rm -f "$out" 2>/dev/null || true
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --connect-timeout 10 --retry 5 --retry-delay 1 --retry-connrefused -o "$out" "$url" \
-      || return 1
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q --timeout=10 --tries=5 -O "$out" "$url" \
-      || return 1
+    curl -fL --connect-timeout 10 --retry 5 --retry-delay 1 --retry-connrefused -o "$out" "$url" || return 1
   else
-    die "Neither curl nor wget is available"
+    wget -q --timeout=10 --tries=5 -O "$out" "$url" || return 1
   fi
-  return 0
 }
 
-fetch_or_die() {
-  url="$1"
-  out="$2"
-  fetch "$url" "$out" || die "Fetch failed: $url"
-}
+fetch_or_die() { fetch "$1" "$2" || die "Fetch failed: $1"; }
 
-# --- Decompression helper (prefer zstd -dc; fallback unzstd -c) ---
 zstd_cat() {
   in="$1"
-  if command -v zstd >/dev/null 2>&1; then
-    zstd -dc "$in"
-  elif command -v unzstd >/dev/null 2>&1; then
-    unzstd -c "$in"
-  else
-    die "Need zstd or unzstd to extract .tar.zst"
+  if command -v zstd >/dev/null 2>&1; then zstd -dc "$in"
+  elif command -v unzstd >/dev/null 2>&1; then unzstd -c "$in"
+  else die "Need zstd or unzstd"
   fi
 }
 
-# --- Wait for NVMe device ---
 log "Waiting for NVMe..."
 i=0
 while [ ! -b /dev/nvme0n1 ]; do
@@ -151,7 +108,6 @@ while [ ! -b /dev/nvme0n1 ]; do
   sleep 0.1
 done
 
-# Required tooling for the install flow
 need_cmd parted
 need_cmd mkfs.vfat
 need_cmd mkfs.ext4
@@ -160,44 +116,26 @@ need_cmd mount
 need_cmd umount
 need_cmd tar
 
-# If udev exists, settle before manipulating partitions
-if command -v udevadm >/dev/null 2>&1; then
-  udevadm settle 2>/dev/null || true
-fi
+command -v udevadm >/dev/null 2>&1 && udevadm settle 2>/dev/null || true
 
-# --- Partition + format (DESTROYS DISK) ---
-log "Partitioning NVMe (this will wipe /dev/nvme0n1)..."
-
-# Best-effort unmounts if rerun
+log "Partitioning NVMe..."
 umount /mnt/root/boot/firmware 2>/dev/null || true
 umount /mnt/root 2>/dev/null || true
-
-# Wipe old signatures to avoid mkfs confusion (best effort)
-if command -v wipefs >/dev/null 2>&1; then
-  wipefs -a /dev/nvme0n1 2>/dev/null || true
-fi
+command -v wipefs >/dev/null 2>&1 && wipefs -a /dev/nvme0n1 2>/dev/null || true
 
 parted -s /dev/nvme0n1 mklabel gpt || die "parted mklabel failed"
 parted -s /dev/nvme0n1 mkpart boot fat32 1MiB 512MiB || die "parted mkpart boot failed"
 parted -s /dev/nvme0n1 set 1 esp on || die "parted set esp failed"
 parted -s /dev/nvme0n1 mkpart root ext4 512MiB 100% || die "parted mkpart root failed"
 
-# Notify kernel of partition table
-if command -v partprobe >/dev/null 2>&1; then
-  partprobe /dev/nvme0n1 2>/dev/null || true
-fi
+command -v partprobe >/dev/null 2>&1 && partprobe /dev/nvme0n1 2>/dev/null || true
+command -v udevadm >/dev/null 2>&1 && udevadm settle 2>/dev/null || true
 
-# If udev exists, settle again after partition changes
-if command -v udevadm >/dev/null 2>&1; then
-  udevadm settle 2>/dev/null || true
-fi
-
-# Wait for partition nodes
 log "Waiting for NVMe partitions..."
 i=0
 while [ ! -b /dev/nvme0n1p1 ] || [ ! -b /dev/nvme0n1p2 ]; do
   i=$((i+1))
-  [ "$i" -gt 200 ] && die "Partition nodes not present (/dev/nvme0n1p1,p2)"
+  [ "$i" -gt 200 ] && die "Partition nodes not present"
   sleep 0.1
 done
 
@@ -205,10 +143,7 @@ log "Formatting..."
 mkfs.vfat -F32 -n BOOT /dev/nvme0n1p1 || die "mkfs.vfat failed"
 mkfs.ext4 -F -L rootfs /dev/nvme0n1p2 || die "mkfs.ext4 failed"
 
-# Ensure blkid sees the new UUIDs/PARTUUIDs
-if command -v udevadm >/dev/null 2>&1; then
-  udevadm settle 2>/dev/null || true
-fi
+command -v udevadm >/dev/null 2>&1 && udevadm settle 2>/dev/null || true
 
 ROOT_UUID="$(blkid -s UUID -o value /dev/nvme0n1p2 2>/dev/null || true)"
 BOOT_UUID="$(blkid -s UUID -o value /dev/nvme0n1p1 2>/dev/null || true)"
@@ -216,64 +151,37 @@ ROOT_PARTUUID="$(blkid -s PARTUUID -o value /dev/nvme0n1p2 2>/dev/null || true)"
 [ -n "${ROOT_UUID:-}" ] || die "Could not get ROOT_UUID"
 [ -n "${BOOT_UUID:-}" ] || die "Could not get BOOT_UUID"
 [ -n "${ROOT_PARTUUID:-}" ] || die "Could not get ROOT_PARTUUID"
-log "ROOT_UUID=${ROOT_UUID}"
-log "BOOT_UUID=${BOOT_UUID}"
-log "ROOT_PARTUUID=${ROOT_PARTUUID}"
 
-# --- Mount target ---
 mount /dev/nvme0n1p2 /mnt/root || die "Mount root failed"
 mkdir -p /mnt/root/boot/firmware
 mount /dev/nvme0n1p1 /mnt/root/boot/firmware || die "Mount boot firmware failed"
 
-# --- Install Debian rootfs ---
 log "Fetching Debian rootfs..."
 fetch_or_die "${ART}/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
-
 log "Extracting rootfs..."
 zstd_cat /tmp/rootfs.tar.zst | tar -xpf - -C /mnt/root || die "Extract rootfs failed"
 
-# --- Sanitize rootfs so NVMe boot is a true first boot ---
-log "Sanitizing rootfs (cloud-init + machine-id + timesync state)..."
-
-# Remove cloud-init state baked into the rootfs artifact (your June 2025 problem)
+log "Sanitizing rootfs..."
 rm -rf /mnt/root/var/lib/cloud 2>/dev/null || true
 rm -f  /mnt/root/var/log/cloud-init.log /mnt/root/var/log/cloud-init-output.log 2>/dev/null || true
-
-# Force machine-id regeneration on first boot
-rm -f /mnt/root/etc/machine-id 2>/dev/null || true
-rm -f /mnt/root/var/lib/dbus/machine-id 2>/dev/null || true
-
-# If present, remove any persisted timesync state
+rm -f /mnt/root/etc/machine-id /mnt/root/var/lib/dbus/machine-id 2>/dev/null || true
 rm -f /mnt/root/var/lib/systemd/timesync/clock /mnt/root/var/lib/systemd/timesync/clock.* 2>/dev/null || true
 
-# --- Install Pi firmware bundle ---
 log "Fetching Pi firmware bundle..."
 fetch_or_die "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
-
 log "Installing firmware..."
 zstd_cat /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware || die "Extract firmware failed"
 
-# --- Install matching Pi kernel modules (required for Docker networking, overlay, etc.) ---
 log "Fetching Pi kernel modules bundle..."
 fetch_or_die "${ART}/pi-modules.tar.zst" /tmp/pi-modules.tar.zst
-
-log "Installing Pi kernel modules into /lib/modules..."
+log "Installing modules..."
 mkdir -p /mnt/root/lib/modules
 zstd_cat /tmp/pi-modules.tar.zst | tar -xpf - -C /mnt/root/lib/modules || die "Extract modules failed"
 
-# Validate we installed a Pi 5-compatible module tree (prefer v8-16k+)
-KVER_INSTALLED="$(ls -1 /mnt/root/lib/modules 2>/dev/null | sort -V | grep -E '(^|-)v8-16k\+$' | tail -n1 || true)"
-if [ -z "${KVER_INSTALLED:-}" ]; then
-  warn "No v8-16k+ module tree found under /mnt/root/lib/modules; found:"
-  ls -la /mnt/root/lib/modules || true
-  die "Kernel modules missing/incorrect (expected *-v8-16k+)"
-fi
-log "Installed kernel modules: $KVER_INSTALLED"
-
-# Force datasource selection
+# Cloud-init datasource selection in the installed OS
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloudNet ]
+datasource_list: [ NoCloudNet, None ]
 EOF
 
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
@@ -282,40 +190,20 @@ EOF
 
 log "Writing NVMe cmdline.txt..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
-console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;s=${SEED}/
+console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;seedfrom=${SEED}/
 EOF
 
-log "Writing NVMe config.txt..."
-cat > /mnt/root/boot/firmware/config.txt <<'EOF'
-arm_64bit=1
-kernel=kernel_2712.img
-
-enable_uart=1
-uart_2ndstage=1
-dtoverlay=disable-bt
-EOF
-
-log "Writing NVMe autoboot.txt..."
-cat > /mnt/root/boot/firmware/autoboot.txt <<'EOF'
-boot_partition=0
-EOF
-
-log "Writing fstab (filesystem UUIDs)..."
+log "Writing fstab..."
 cat > /mnt/root/etc/fstab <<EOF
 UUID=${ROOT_UUID}  /              ext4  defaults,noatime  0  1
 UUID=${BOOT_UUID}  /boot/firmware vfat  defaults         0  2
 EOF
 
-# Extra safety: ensure everything is on disk before reboot
 sync
-
-# --- Clean unmount ---
 umount /mnt/root/boot/firmware 2>/dev/null || true
 umount /mnt/root 2>/dev/null || true
 sync
 
 log "Install complete; rebooting..."
 reboot -f
-
-# If reboot fails for some reason, drop to shell
 exec sh

@@ -1,31 +1,21 @@
-version: 2
-renderer: networkd
-ethernets:
-  {{ net.ifname | default('end0') }}:
+# This file is consumed by cloud-init NoCloud/NoCloudNet as "network-config"
+# It is written into /etc/network/interfaces.d/20-static.cfg (via cloud-init ENI renderer)
+
+auto {{ net.ifname | default('end0') }}
+iface {{ net.ifname | default('end0') }} inet {% if (net.mode | default('dhcp')) == 'static' %}static{% else %}dhcp{% endif %}
 {% if net.mac is defined and net.mac %}
-    match:
-      macaddress: {{ net.mac }}
-    set-name: {{ net.ifname | default('end0') }}
+    hwaddress ether {{ net.mac }}
 {% endif %}
-    dhcp4: {{ 'true' if (net.mode | default('dhcp')) == 'dhcp' else 'false' }}
-    dhcp6: {{ 'true' if (net.dhcp6 | default(false)) else 'false' }}
 {% if (net.mode | default('dhcp')) == 'static' %}
-    addresses:
-      - {{ net.address }}
-    gateway4: {{ net.gateway }}
+    address {{ net.address.split('/')[0] if '/' in net.address else net.address }}
+{% if '/' in net.address %}
+    netmask {{ '255.255.255.0' }}
 {% endif %}
-{% if net.dns is defined or net.search is defined %}
-    nameservers:
-{% if net.dns is defined %}
-      addresses:
-{% for d in net.dns %}
-        - {{ d }}
-{% endfor %}
+    gateway {{ net.gateway }}
+{% if net.dns is defined and net.dns %}
+    dns-nameservers{% for d in net.dns %} {{ d }}{% endfor %}
 {% endif %}
-{% if net.search is defined %}
-      search:
-{% for s in net.search %}
-        - {{ s }}
-{% endfor %}
+{% if net.search is defined and net.search %}
+    dns-search{% for s in net.search %} {{ s }}{% endfor %}
 {% endif %}
 {% endif %}
