@@ -2,8 +2,6 @@
 locale: en_US.UTF-8
 timezone: {{ timezone | default("UTC") }}
 
-{# NOTE: Do NOT include "keyboard:" here. On minimal images it can cause cloud-config.service to fail. #}
-
 {% if net is defined and net %}
 network:
   version: 2
@@ -79,11 +77,9 @@ write_files:
 {% endif %}
 
 runcmd:
-  # 1) Make sure SSH is on early
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now ssh || true" ]
-
 {%- if docker | default(false) %}
-  # 2) Docker install (while ifupdown DHCP is still providing stable connectivity)
+{# Docker install #}
   - [ bash, -lc, "set -euo pipefail; install -m 0755 -d /etc/apt/keyrings" ]
   - [ bash, -lc, "set -euo pipefail; curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg" ]
   - [ bash, -lc, "set -euo pipefail; gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg" ]
@@ -95,27 +91,21 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
   - [ bash, -lc, "set -euo pipefail; usermod -aG docker {{ username }} || true" ]
 {% endif %}
-
 {%- if docker | default(false) and roles %}
-  # 3) Apply docker role bundles (still on stable ifupdown connectivity)
+{# Apply docker role bundles #}
   - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
-
-  # 4) Mark provisioning complete
-  - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
-
-  # 5) LAST: switch from ifupdown bootstrap -> netplan/networkd (no live netplan apply; reboot will cleanly switch)
   - [ bash, -lc, "set -euo pipefail; echo '[cloud-init] switching networking from ifupdown to netplan+networkd' | systemd-cat -t cloud-init || true" ]
-
-  # Enable the target stack for next boot
+{# Enable the target stack for next boot #}
   - [ bash, -lc, "set -euo pipefail; systemctl enable systemd-networkd systemd-resolved || true" ]
   - [ bash, -lc, "set -euo pipefail; ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true" ]
-
-  # Disable/remove ifupdown so it cannot interfere on next boot
+{# Disable/remove ifupdown so it cannot interfere on next boot #}
   - [ bash, -lc, "set -euo pipefail; systemctl disable networking.service || true" ]
   - [ bash, -lc, "set -euo pipefail; rm -f /etc/network/interfaces; rm -rf /etc/network/interfaces.d || true" ]
   - [ bash, -lc, "set -euo pipefail; apt-get purge -y ifupdown || true" ]
+{# Mark provisioning complete #}
+  - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:
   mode: reboot
