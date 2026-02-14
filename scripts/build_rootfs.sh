@@ -54,20 +54,6 @@ export LC_ALL=C.UTF-8
 
 apt-get update
 
-# ---- systemd unit enable/mask helpers (work in chroot without PID1) ----
-enable_unit() {
-  local u="$1"
-  mkdir -p /etc/systemd/system/multi-user.target.wants
-  ln -sf "/lib/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u" || true
-}
-
-mask_unit() {
-  local u="$1"
-  mkdir -p /etc/systemd/system
-  ln -sf /dev/null "/etc/systemd/system/$u" || true
-  find /etc/systemd/system -type l -name "$u" -path "*/wants/*" -delete 2>/dev/null || true
-}
-
 # Locale
 apt-get install -y --no-install-recommends locales
 sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
@@ -84,48 +70,46 @@ apt-get install -y --no-install-recommends \
   iputils-ping libcap2-bin
 
 # ---- IFUPDOWN BOOTSTRAP DHCP (FIRST BOOT) ----
-# Keep it simple and deterministic: DHCP on likely interface names.
-# (if one doesn't exist, ifupdown ignores it)
+# Deterministic DHCP: use "auto" (not allow-hotplug) so boot doesn't depend on udev hotplug timing.
 cat > /etc/network/interfaces <<'EOF'
 auto lo
 iface lo inet loopback
 
-allow-hotplug end0
+auto end0
 iface end0 inet dhcp
 
-allow-hotplug eth0
+auto eth0
 iface eth0 inet dhcp
 EOF
 
 rm -rf /etc/network/interfaces.d/* 2>/dev/null || true
 
-# Ensure classic ifupdown service is enabled (Debian uses networking.service)
-enable_unit networking.service
+# Ensure classic ifupdown service is enabled (Debian uses networking.service).
+# systemctl enable works in chroot (it only writes symlinks).
+systemctl enable networking.service 2>/dev/null || true
 
 # resolved is fine to run with ifupdown; provides stub resolver
-enable_unit systemd-resolved.service
+systemctl enable systemd-resolved.service 2>/dev/null || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
 
-# Prefer netplan renderer in cloud-init (kept for later when you switch)
+# ---- DO NOT GATE CLOUD-INIT ON network-online.target ----
+rm -f /etc/systemd/system/cloud-init-local.service.d/network-online.conf 2>/dev/null || true
+rm -f /etc/systemd/system/cloud-init.service.d/network-online.conf 2>/dev/null || true
+rm -rf /etc/systemd/system/systemd-networkd-wait-online.service.d 2>/dev/null || true
+rm -f /etc/systemd/system/multi-user.target.wants/systemd-networkd-wait-online.service 2>/dev/null || true
+
+# ---- DO NOT PRE-ENABLE systemd-networkd IN THE ROOTFS ----
+# You will switch to netplan+networkd later from cloud-init; keep the bootstrap simple.
+systemctl disable systemd-networkd.service 2>/dev/null || true
+rm -f /etc/systemd/system/multi-user.target.wants/systemd-networkd.service 2>/dev/null || true
+
+# Keep netplan installed for later, and hint cloud-init that netplan is an allowed renderer.
 mkdir -p /etc/cloud/cloud.cfg.d
 cat > /etc/cloud/cloud.cfg.d/99-renderer.cfg <<'EOF'
 system_info:
   network:
     renderers: ['netplan']
 EOF
-
-# ---- REMOVE PREVIOUS "NETWORKD WAIT-ONLINE" GATING ----
-# Do NOT force cloud-init to wait for network-online.target; it caused failures.
-rm -f /etc/systemd/system/cloud-init-local.service.d/network-online.conf 2>/dev/null || true
-rm -f /etc/systemd/system/cloud-init.service.d/network-online.conf 2>/dev/null || true
-rm -rf /etc/systemd/system/systemd-networkd-wait-online.service.d 2>/dev/null || true
-rm -f /etc/systemd/system/multi-user.target.wants/systemd-networkd-wait-online.service 2>/dev/null || true
-
-# ---- STOP USING SYSTEMD-NETWORKD AS A BOOTSTRAP MECHANISM ----
-# If you later switch to netplan+networkd in the seed, you can enable then.
-rm -f /etc/systemd/system/multi-user.target.wants/systemd-networkd.service 2>/dev/null || true
-rm -f /etc/systemd/system/multi-user.target.wants/systemd-resolved.service 2>/dev/null || true
-enable_unit systemd-resolved.service
 
 # ---- Fix netplan "permissions too open" by forcing cloud-init to write secure perms ----
 mkdir -p /etc/systemd/system/cloud-init.service.d
@@ -169,7 +153,6 @@ cloud_config_modules:
   - ssh
 EOF
 
-# Remove prior keyboard disabled config if it existed
 rm -f /etc/cloud/cloud.cfg.d/90-keyboard-disabled.cfg 2>/dev/null || true
 
 # Disable RightScale datasource noise
@@ -202,9 +185,10 @@ fi
 # Lock root account
 passwd -l root || true
 
-enable_unit ssh.service
-enable_unit fake-hwclock.service
-enable_unit chrony.service
+# Enable services deterministically (use systemctl enable, not custom symlinks)
+systemctl enable ssh.service 2>/dev/null || true
+systemctl enable fake-hwclock.service 2>/dev/null || true
+systemctl enable chrony.service 2>/dev/null || true
 
 echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
 
