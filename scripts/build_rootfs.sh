@@ -112,6 +112,7 @@ enable_unit serial-getty@ttyAMA10.service
 # Prefer netplan renderer for later (when cloud-init writes 50-cloud-init.yaml)
 mkdir -p /etc/cloud/cloud.cfg.d
 cat > /etc/cloud/cloud.cfg.d/99-renderer.cfg <<'EOF'
+#cloud-config
 system_info:
   network:
     renderers: ['netplan']
@@ -145,6 +146,7 @@ EOF
 
 # Disable RightScale datasource noise
 cat > /etc/cloud/cloud.cfg.d/90-disable-rightscale.cfg <<'EOF'
+#cloud-config
 datasource:
   RightScale: {enabled: false}
 EOF
