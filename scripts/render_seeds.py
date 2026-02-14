@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import yaml
+import ipaddress
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 TEMPLATES_DIR = "templates"
@@ -23,6 +24,18 @@ with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
     inv = yaml.safe_load(f) or {}
 
 os.makedirs(OUT_BASE, exist_ok=True)
+
+def netmask_from_prefix(cidr: str) -> str:
+    """
+    Accepts 'A.B.C.D/prefix' and returns dotted netmask.
+    Example: '192.168.3.75/24' -> '255.255.255.0'
+    """
+    if "/" not in cidr:
+        raise ValueError(f"Static net.address must be CIDR, got: {cidr!r}")
+    prefix = int(cidr.split("/", 1)[1])
+    return str(ipaddress.IPv4Network(f"0.0.0.0/{prefix}").netmask)
+
+env.globals["netmask_from_prefix"] = netmask_from_prefix
 
 def get_build_id() -> str:
     """
@@ -76,6 +89,10 @@ def normalize_net(cfg: dict) -> dict | None:
         if missing:
             raise ValueError(
                 f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config"
+            )
+        if "/" not in str(net.get("address", "")):
+            raise ValueError(
+                f"{cfg.get('hostname','<unknown>')}: net.address must be CIDR (e.g., 192.168.3.75/24)"
             )
 
     if "dns" in net and net["dns"] is not None and not isinstance(net["dns"], list):
