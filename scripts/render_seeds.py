@@ -17,11 +17,43 @@ env = Environment(
 
 t_user = env.get_template("user-data.j2")
 t_meta = env.get_template("meta-data.j2")
+t_net = env.get_template("network-config.j2")
 
 with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
     inv = yaml.safe_load(f) or {}
 
 os.makedirs(OUT_BASE, exist_ok=True)
+
+def get_build_id() -> str:
+    """
+    Derive a deterministic build id from the Git SHA.
+    Priority:
+      1) CI env vars (Gitea/GitHub)
+      2) git rev-parse (if .git present)
+      3) fallback constant
+    """
+    for k in ("GITEA_SHA", "GITHUB_SHA", "CI_COMMIT_SHA"):
+        v = os.environ.get(k, "").strip()
+        if v:
+            return v
+
+    # Try local git (works when running in a checked-out repo)
+    try:
+        import subprocess
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if sha:
+            return sha
+    except Exception:
+        pass
+
+    return "nogit"
+
+BUILD_SHA = get_build_id()
+BUILD_SHA_SHORT = BUILD_SHA[:12]  # short but still highly unique
 
 def normalize_net(cfg: dict) -> dict | None:
     net = cfg.get("net")
@@ -46,6 +78,11 @@ def normalize_net(cfg: dict) -> dict | None:
                 f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config"
             )
 
+    if "dns" in net and net["dns"] is not None and not isinstance(net["dns"], list):
+        raise ValueError(f"{cfg.get('hostname','<unknown>')}: net.dns must be a list")
+    if "search" in net and net["search"] is not None and not isinstance(net["search"], list):
+        raise ValueError(f"{cfg.get('hostname','<unknown>')}: net.search must be a list")
+
     return net
 
 pis = inv.get("pis", {}) or {}
@@ -55,23 +92,29 @@ for serial, cfg in pis.items():
 
     net = normalize_net(cfg)
 
-    # Render meta-data
+    # Deterministic instance-id per build: serial + git SHA
+    instance_id = f"{serial}-{BUILD_SHA_SHORT}"
+
     meta = t_meta.render(
         serial=serial,
+        instance_id=instance_id,
         hostname=cfg["hostname"],
     )
 
-    # Render user-data
     user = t_user.render(
         username=cfg.get("username", "smittyman"),
         passwd_hash=cfg.get("passwd_hash", ""),
         docker=bool(cfg.get("docker", False)),
-        roles=cfg.get("roles", []) or [], 
+        roles=cfg.get("roles", []) or [],
         ssh_authorized_keys=cfg.get("ssh_authorized_keys", []) or [],
         packages=cfg.get("packages", []) or [],
         timezone=cfg.get("timezone", "UTC"),
-        net=net,
+        net=net,  # keep if your template still references it (even though network is now in network-config)
     )
+
+    network_cfg = None
+    if net is not None:
+        network_cfg = t_net.render(net=net)
 
     with open(os.path.join(d, "meta-data"), "w", encoding="utf-8") as f2:
         f2.write(meta.strip() + "\n")
@@ -79,7 +122,12 @@ for serial, cfg in pis.items():
     with open(os.path.join(d, "user-data"), "w", encoding="utf-8") as f2:
         f2.write(user.strip() + "\n")
 
+    if network_cfg is not None:
+        with open(os.path.join(d, "network-config"), "w", encoding="utf-8") as f2:
+            f2.write(network_cfg.strip() + "\n")
+
     with open(os.path.join(d, "vendor-data"), "w", encoding="utf-8") as f2:
         f2.write("# empty vendor-data\n")
 
 print(f"Rendered seeds to {OUT_BASE}/")
+print(f"Build SHA: {BUILD_SHA} (short={BUILD_SHA_SHORT})")

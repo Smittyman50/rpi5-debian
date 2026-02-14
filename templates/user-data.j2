@@ -2,36 +2,6 @@
 locale: en_US.UTF-8
 timezone: {{ timezone | default("UTC") }}
 
-{% if net is defined and net %}
-network:
-  version: 2
-  renderer: networkd
-  ethernets:
-    {{ net.ifname | default('end0') }}:
-      dhcp4: {{ 'true' if (net.mode | default('dhcp')) == 'dhcp' else 'false' }}
-      dhcp6: {{ 'true' if (net.dhcp6 | default(false)) else 'false' }}
-{% if (net.mode | default('dhcp')) == 'static' %}
-      addresses:
-        - {{ net.address }}
-      gateway4: {{ net.gateway }}
-{% endif %}
-{% if net.dns is defined or net.search is defined %}
-      nameservers:
-{% if net.dns is defined %}
-        addresses:
-{% for d in net.dns %}
-          - {{ d }}
-{% endfor %}
-{% endif %}
-{% if net.search is defined %}
-        search:
-{% for s in net.search %}
-          - {{ s }}
-{% endfor %}
-{% endif %}
-{% endif %}
-{% endif %}
-
 users:
   - name: {{ username }}
     sudo: ALL=(ALL) NOPASSWD:ALL
