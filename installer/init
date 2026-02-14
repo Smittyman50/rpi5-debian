@@ -92,7 +92,7 @@ log "Time before: $(date -R 2>/dev/null || date)"
       warn "Epoch fetch failed/invalid: ${EPOCH:-<empty>}"
       ;;
     *)
-      run date -u -s "@$EPOCH" || true
+      date -u -s "@$EPOCH" || true
       log "Time after epoch set: $(date -R 2>/dev/null || date)"
       ;;
   esac
@@ -273,7 +273,7 @@ log "Installed kernel modules: $KVER_INSTALLED"
 # Force datasource selection
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloud, NoCloudNet ]
+datasource_list: [ NoCloudNet ]
 EOF
 
 cat > /mnt/root/etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
