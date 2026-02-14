@@ -8,10 +8,8 @@ MIRROR=http://deb.debian.org/debian
 ROOTFS_DIR="${ROOTFS_DIR:-out/rootfs}"
 OUT_TAR="${OUT_TAR:-out/artifacts/debian-bookworm-arm64-rootfs.tar.zst}"
 
-# Optional but strongly recommended: console-recovery user password hash (SHA-512 crypt)
-# Example: FALLBACK_PASSWD_HASH='$6$...'
-FALLBACK_USER="${FALLBACK_USER:-smittyman}"
-FALLBACK_PASSWD_HASH="${FALLBACK_PASSWD_HASH:-'***REMOVED***'}"
+FALLBACK_USER="smittyman"
+FALLBACK_PASSWD_HASH="***REMOVED***"
 
 mkdir -p out/artifacts
 rm -rf "$ROOTFS_DIR"
