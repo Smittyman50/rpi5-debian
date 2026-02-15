@@ -175,6 +175,12 @@ mount /dev/nvme0n1p2 /mnt/root || die "Mount root failed"
 mkdir -p /mnt/root/boot/firmware
 mount /dev/nvme0n1p1 /mnt/root/boot/firmware || die "Mount boot firmware failed"
 
+# Best-effort fsck to reduce chance ext4 mounts RO on first boot
+if command -v e2fsck >/dev/null 2>&1; then
+  log "Best-effort e2fsck on root partition..."
+  e2fsck -fy /dev/nvme0n1p2 >/dev/null 2>&1 || true
+fi
+
 log "Fetching Debian rootfs..."
 fetch_or_die "${ART}/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
 log "Extracting rootfs..."
@@ -198,26 +204,15 @@ if [ -z "${KVER_INSTALLED:-}" ]; then
 fi
 log "Installed kernel modules: $KVER_INSTALLED"
 
-log "Finalizing target for first boot (minimal)..."
-
-# Ensure machine-id regenerates on first NVMe boot (safe even if already absent)
-rm -f /mnt/root/etc/machine-id /mnt/root/var/lib/dbus/machine-id 2>/dev/null || true
-
-# Optional: only clear cloud-init state if present (belt-and-suspenders)
-if [ -d /mnt/root/var/lib/cloud ]; then
-  rm -rf /mnt/root/var/lib/cloud 2>/dev/null || true
-fi
-
 log "Writing NVMe cmdline.txt..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
-console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud;s=${SEED}/
+console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;s=${SEED}/
 EOF
 
 log "Writing NVMe config.txt..."
 cat > /mnt/root/boot/firmware/config.txt <<'EOF'
 arm_64bit=1
 kernel=kernel_2712.img
-
 enable_uart=1
 uart_2ndstage=1
 dtoverlay=disable-bt

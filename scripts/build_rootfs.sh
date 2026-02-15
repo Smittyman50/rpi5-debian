@@ -108,7 +108,7 @@ mkdir -p /etc/cloud/cloud.cfg.d
 
 # Ensure NoCloud is allowed (matches ds=nocloud in cmdline)
 cat > /etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloud ]
+datasource_list: [ NoCloudNet ]
 EOF
 
 cat > /etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
@@ -194,8 +194,12 @@ rm -rf /var/lib/apt/lists/*
 # sanitize for true first boot
 rm -rf /var/lib/cloud
 rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
-rm -f /etc/machine-id
-rm -f /var/lib/dbus/machine-id
+# Ensure machine-id will be generated on first boot
+rm -f /etc/machine-id /var/lib/dbus/machine-id
+install -d -m 0755 /var/lib/dbus
+: > /etc/machine-id
+ln -sf /etc/machine-id /var/lib/dbus/machine-id
+chmod 0444 /etc/machine-id
 CHROOT
 
 cleanup_mounts
