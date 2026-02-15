@@ -8,9 +8,6 @@ MIRROR=http://deb.debian.org/debian
 ROOTFS_DIR="${ROOTFS_DIR:-out/rootfs}"
 OUT_TAR="${OUT_TAR:-out/artifacts/debian-bookworm-arm64-rootfs.tar.zst}"
 
-FALLBACK_USER="smittyman"
-FALLBACK_PASSWD_HASH='***REMOVED***'
-
 mkdir -p out/artifacts
 rm -rf "$ROOTFS_DIR"
 
@@ -167,24 +164,6 @@ passwd -l root || true
 enable_unit ssh.service
 enable_unit fake-hwclock.service
 enable_unit chrony.service
-
-# ---- FALLBACK CONSOLE USER ----
-FALLBACK_USER="${FALLBACK_USER:-smittyman}"
-FALLBACK_PASSWD_HASH="${FALLBACK_PASSWD_HASH:-}"
-
-if ! id -u "$FALLBACK_USER" >/dev/null 2>&1; then
-  useradd -m -s /bin/bash -G sudo "$FALLBACK_USER"
-fi
-
-if [ -n "${FALLBACK_PASSWD_HASH:-}" ]; then
-  usermod -p "$FALLBACK_PASSWD_HASH" "$FALLBACK_USER" || true
-  passwd -u "$FALLBACK_USER" 2>/dev/null || true
-else
-  passwd -l "$FALLBACK_USER" 2>/dev/null || true
-fi
-
-echo "$FALLBACK_USER ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/90-fallback-user
-chmod 0440 /etc/sudoers.d/90-fallback-user
 
 echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
 
