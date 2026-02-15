@@ -50,26 +50,27 @@ else
     done
   fi
 
-DHCP_OK=1
+  DHCP_OK=1
 
-if command -v dhclient >/dev/null 2>&1; then
-  rm -f /run/dhclient.* /var/lib/dhcp/dhclient.* 2>/dev/null || true
-  dhclient -4 -v -1 -pf /run/dhclient.pid -lf /run/dhclient.leases eth0 \
-    || DHCP_OK=0
-elif command -v udhcpc >/dev/null 2>&1; then
-  udhcpc -i eth0 -n -q -f || DHCP_OK=0
-else
-  die "No DHCP client found (need dhclient or udhcpc)"
-fi
-
-if [ "$DHCP_OK" -ne 1 ]; then
-  warn "DHCP failed; testing network connectivity..."
-
-  # Minimal connectivity test against your HTTP base
-  if fetch "${HTTP_BASE}/time" /tmp/net.test 2>/dev/null; then
-    log "Network is usable despite DHCP failure; continuing"
+  if command -v dhclient >/dev/null 2>&1; then
+    rm -f /run/dhclient.* /var/lib/dhcp/dhclient.* 2>/dev/null || true
+    dhclient -4 -v -1 -pf /run/dhclient.pid -lf /run/dhclient.leases eth0 \
+      || DHCP_OK=0
+  elif command -v udhcpc >/dev/null 2>&1; then
+    udhcpc -i eth0 -n -q -f || DHCP_OK=0
   else
-    die "No usable network (DHCP failed and fetch test failed)"
+    die "No DHCP client found (need dhclient or udhcpc)"
+  fi
+
+  if [ "$DHCP_OK" -ne 1 ]; then
+    warn "DHCP failed; testing network connectivity..."
+
+    # Minimal connectivity test against your HTTP base
+    if fetch "${HTTP_BASE}/time" /tmp/net.test 2>/dev/null; then
+      log "Network is usable despite DHCP failure; continuing"
+    else
+      die "No usable network (DHCP failed and fetch test failed)"
+    fi
   fi
 fi
 
@@ -214,7 +215,7 @@ preserve_hostname: false
 EOF
 
 log "Writing NVMe cmdline.txt..."
-cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
+cat > /mnt/root/boot/firmware/cmdline.txt <<'EOF'
 console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;seedfrom=${SEED}/
 EOF
 
@@ -234,7 +235,7 @@ boot_partition=0
 EOF
 
 log "Writing fstab..."
-cat > /mnt/root/etc/fstab <<EOF
+cat > /mnt/root/etc/fstab <<'EOF'
 UUID=${ROOT_UUID}  /              ext4  defaults,noatime  0  1
 UUID=${BOOT_UUID}  /boot/firmware vfat  defaults         0  2
 EOF
