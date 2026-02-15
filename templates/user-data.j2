@@ -11,8 +11,8 @@ manage_etc_hosts: true
 network:
   version: 2
   ethernets:
-    {{ net_iface | default("end0") }}:
-{% if static_ip is defined and static_ip %}
+    {{ net.ifname | default('end0') }}:
+{% if net.mode == 'static' %}
       dhcp4: false
       addresses:
         - {{ static_ip }}/{{ static_prefix | default(24) }}
@@ -21,12 +21,15 @@ network:
         - to: 0.0.0.0/0
           via: {{ gateway }}
 {% endif %}
-{% if dns_servers is defined and dns_servers %}
+{% if net.dns is defined and dns_servers %}
       nameservers:
         addresses:
 {% for ns in dns_servers %}
-          - {{ ns }}
+          - {{ net.dns }}
 {% endfor %}
+{% if net.search is defined %}
+        search: {{ net.search }}
+{% endif %}
 {% endif %}
 {% else %}
       dhcp4: true

@@ -18,24 +18,36 @@ env = Environment(
 
 t_user = env.get_template("user-data.j2")
 t_meta = env.get_template("meta-data.j2")
-t_net = env.get_template("network-config.j2")
 
 with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
     inv = yaml.safe_load(f) or {}
 
 os.makedirs(OUT_BASE, exist_ok=True)
 
-def netmask_from_prefix(cidr: str) -> str:
-    """
-    Accepts 'A.B.C.D/prefix' and returns dotted netmask.
-    Example: '192.168.3.75/24' -> '255.255.255.0'
-    """
-    if "/" not in cidr:
-        raise ValueError(f"Static net.address must be CIDR, got: {cidr!r}")
-    prefix = int(cidr.split("/", 1)[1])
-    return str(ipaddress.IPv4Network(f"0.0.0.0/{prefix}").netmask)
+def normalize_net(cfg: dict) -> dict | None:
+    net = cfg.get("net")
+    if not net:
+        return None
 
-env.globals["netmask_from_prefix"] = netmask_from_prefix
+    net = dict(net)
+    net.setdefault("mode", "dhcp")     # dhcp|static
+    net.setdefault("ifname", "end0")
+    net.setdefault("dhcp6", False)
+
+    mode = net.get("mode")
+    if mode not in ("dhcp", "static"):
+        raise ValueError(
+            f"{cfg.get('hostname','<unknown>')}: net.mode must be dhcp|static (got {mode!r})"
+        )
+
+    if mode == "static":
+        missing = [k for k in ("address", "gateway") if not net.get(k)]
+        if missing:
+            raise ValueError(
+                f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config"
+            )
+
+    return net
 
 def get_build_id() -> str:
     """
@@ -68,40 +80,6 @@ def get_build_id() -> str:
 BUILD_SHA = get_build_id()
 BUILD_SHA_SHORT = BUILD_SHA[:12]  # short but still highly unique
 
-def normalize_net(cfg: dict) -> dict | None:
-    net = cfg.get("net")
-    if not net:
-        return None
-
-    net = dict(net)
-    net.setdefault("mode", "dhcp")     # dhcp|static
-    net.setdefault("ifname", "end0")
-    net.setdefault("dhcp6", False)
-
-    mode = net.get("mode")
-    if mode not in ("dhcp", "static"):
-        raise ValueError(
-            f"{cfg.get('hostname','<unknown>')}: net.mode must be dhcp|static (got {mode!r})"
-        )
-
-    if mode == "static":
-        missing = [k for k in ("address", "gateway") if not net.get(k)]
-        if missing:
-            raise ValueError(
-                f"{cfg.get('hostname','<unknown>')}: missing net.{', net.'.join(missing)} for static config"
-            )
-        if "/" not in str(net.get("address", "")):
-            raise ValueError(
-                f"{cfg.get('hostname','<unknown>')}: net.address must be CIDR (e.g., 192.168.3.75/24)"
-            )
-
-    if "dns" in net and net["dns"] is not None and not isinstance(net["dns"], list):
-        raise ValueError(f"{cfg.get('hostname','<unknown>')}: net.dns must be a list")
-    if "search" in net and net["search"] is not None and not isinstance(net["search"], list):
-        raise ValueError(f"{cfg.get('hostname','<unknown>')}: net.search must be a list")
-
-    return net
-
 pis = inv.get("pis", {}) or {}
 for serial, cfg in pis.items():
     d = os.path.join(OUT_BASE, serial)
@@ -126,12 +104,8 @@ for serial, cfg in pis.items():
         ssh_authorized_keys=cfg.get("ssh_authorized_keys", []) or [],
         packages=cfg.get("packages", []) or [],
         timezone=cfg.get("timezone", "UTC"),
-        net=net,  # keep if your template still references it (even though network is now in network-config)
+        net=net,
     )
-
-    network_cfg = None
-    if net is not None:
-        network_cfg = t_net.render(net=net)
 
     with open(os.path.join(d, "meta-data"), "w", encoding="utf-8") as f2:
         f2.write(meta.strip() + "\n")
