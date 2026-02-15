@@ -32,13 +32,13 @@ done
 
 ip link set lo up 2>/dev/null || true
 
-log "DHCP on eth0..."
-ip link set eth0 up 2>/dev/null || true
+log "DHCP on end0..."
+ip link set end0 up 2>/dev/null || true
 
 if command -v ethtool >/dev/null 2>&1; then
   j=0
   while :; do
-    ethtool eth0 2>/dev/null | grep -q "Link detected: yes" && break
+    ethtool end0 2>/dev/null | grep -q "Link detected: yes" && break
     j=$((j+1))
     [ "$j" -ge 30 ] && break
     sleep 0.1
@@ -47,10 +47,10 @@ fi
 
 if command -v dhclient >/dev/null 2>&1; then
   rm -f /run/dhclient.* /var/lib/dhcp/dhclient.* 2>/dev/null || true
-  dhclient -4 -v -1 -pf /run/dhclient.pid -lf /run/dhclient.leases eth0 \
+  dhclient -4 -v -1 -pf /run/dhclient.pid -lf /run/dhclient.leases end0 \
     || die "DHCP failed (dhclient)"
 elif command -v udhcpc >/dev/null 2>&1; then
-  udhcpc -i eth0 -n -q -f || die "DHCP failed (udhcpc)"
+  udhcpc -i end0 -n -q -f || die "DHCP failed (udhcpc)"
 else
   die "No DHCP client found (need dhclient or udhcpc)"
 fi
@@ -177,6 +177,13 @@ fetch_or_die "${ART}/pi-modules.tar.zst" /tmp/pi-modules.tar.zst
 log "Installing modules..."
 mkdir -p /mnt/root/lib/modules
 zstd_cat /tmp/pi-modules.tar.zst | tar -xpf - -C /mnt/root/lib/modules || die "Extract modules failed"
+KVER_INSTALLED="$(ls -1 /mnt/root/lib/modules 2>/dev/null | sort -V | grep -E '(^|-)v8-16k\+$' | tail -n1 || true)"
+if [ -z "${KVER_INSTALLED:-}" ]; then
+  warn "No v8-16k+ module tree found under /mnt/root/lib/modules; found:"
+  ls -la /mnt/root/lib/modules || true
+  die "Kernel modules missing/incorrect (expected *-v8-16k+)"
+fi
+log "Installed kernel modules: $KVER_INSTALLED"
 
 # Cloud-init datasource selection in the installed OS
 mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
@@ -191,6 +198,21 @@ EOF
 log "Writing NVMe cmdline.txt..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
 console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;seedfrom=${SEED}/
+EOF
+
+log "Writing NVMe config.txt..."
+cat > /mnt/root/boot/firmware/config.txt <<'EOF'
+arm_64bit=1
+kernel=kernel_2712.img
+
+enable_uart=1
+uart_2ndstage=1
+dtoverlay=disable-bt
+EOF
+
+log "Writing NVMe autoboot.txt..."
+cat > /mnt/root/boot/firmware/autoboot.txt <<'EOF'
+boot_partition=0
 EOF
 
 log "Writing fstab..."
