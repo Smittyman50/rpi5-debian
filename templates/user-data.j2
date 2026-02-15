@@ -7,7 +7,6 @@ hostname: {{ hostname }}
 manage_etc_hosts: true
 {% endif %}
 
-# Networking (cloud-init v2). Debian + ifupdown => renderer 'eni' => /etc/network/interfaces
 network:
   version: 2
   ethernets:
