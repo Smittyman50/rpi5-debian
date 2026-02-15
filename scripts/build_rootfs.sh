@@ -40,8 +40,6 @@ is_mounted "$ROOTFS_DIR/dev"  || sudo mount --bind /dev    "$ROOTFS_DIR/dev"
 is_mounted "$ROOTFS_DIR/dev/pts" || sudo mount -t devpts devpts "$ROOTFS_DIR/dev/pts" -o gid=5,mode=620 2>/dev/null || true
 is_mounted "$ROOTFS_DIR/run" || sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run" 2>/dev/null || true
 
-export FALLBACK_USER FALLBACK_PASSWD_HASH
-
 sudo chroot "$ROOTFS_DIR" bash -s <<'CHROOT'
 set -euo pipefail
 
@@ -51,17 +49,14 @@ export LC_ALL=C.UTF-8
 
 apt-get update
 
+# Enable services (prefer systemctl; fallback to symlinks)
 enable_unit() {
-  local u="$1"
+  u=\"\$1\"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable \"\$u\" >/dev/null 2>&1 && return 0
+  fi
   mkdir -p /etc/systemd/system/multi-user.target.wants
-  ln -sf "/lib/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u" || true
-}
-
-mask_unit() {
-  local u="$1"
-  mkdir -p /etc/systemd/system
-  ln -sf /dev/null "/etc/systemd/system/$u" || true
-  find /etc/systemd/system -type l -name "$u" -path "*/wants/*" -delete 2>/dev/null || true
+  ln -sf \"/lib/systemd/system/\$u\" \"/etc/systemd/system/multi-user.target.wants/\$u\" || true
 }
 
 # Locale
@@ -72,76 +67,35 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # Core packages: keep ifupdown for DHCP bootstrap on first NVMe boot
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo cloud-init ifupdown \
-  systemd-resolved fake-hwclock chrony kmod iptables nftables \
-  iputils-ping libcap2-bin
+  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
+  fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
 
-# ---- IFUPDOWN DHCP BOOTSTRAP (FIRST BOOT FROM NVME) ----
-mkdir -p /etc/network/interfaces.d
-cat > /etc/network/interfaces <<'EOF'
-auto lo
-iface lo inet loopback
+apt-get clean
+rm -rf /var/lib/apt/lists/*
 
-source /etc/network/interfaces.d/*.cfg
-EOF
-
-cat > /etc/network/interfaces.d/10-end0-dhcp.cfg <<'EOF'
-auto end0
-iface end0 inet dhcp
-EOF
-
-# Enable ifupdown service
-enable_unit networking.service
-
-# resolved stub resolver
-enable_unit systemd-resolved.service
-ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
+# Ensure ping works for non-root
+if [ -x /usr/bin/ping ] && command -v setcap >/dev/null 2>&1; then
+  setcap cap_net_raw+ep /usr/bin/ping || true
+fi
 
 # serial console getty
 enable_unit serial-getty@ttyAMA10.service
 
-# ---- Cloud-init datasource + networking renderer ----
+# Force datasource selection
 mkdir -p /etc/cloud/cloud.cfg.d
-
-# Ensure NoCloud is allowed (matches ds=nocloud in cmdline)
 cat > /etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloudNet ]
+datasource_list: [ NoCloud, NoCloudNet ]
 EOF
 
 cat > /etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
 preserve_hostname: false
 EOF
 
-# Tell cloud-init to use ENI (ifupdown) networking, not netplan
-cat > /etc/cloud/cloud.cfg.d/99-network-eni.cfg <<'EOF'
-system_info:
-  network:
-    renderers: ['eni']
-EOF
-
-# ---- Kill wait-online delays ----
-mask_unit systemd-networkd-wait-online.service
-mask_unit systemd-networkd.service
-
-# ---- Fix permissions for cloud-init written files (safe default) ----
-for svc in cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service; do
-  mkdir -p "/etc/systemd/system/${svc}.d"
-  cat > "/etc/systemd/system/${svc}.d/umask.conf" <<'EOF'
-[Service]
-UMask=0077
-EOF
-done
-
 # Disable RightScale datasource noise
 cat > /etc/cloud/cloud.cfg.d/90-disable-rightscale.cfg <<'EOF'
 datasource:
   RightScale: {enabled: false}
 EOF
-
-# Ensure ping works for non-root
-if [ -x /usr/bin/ping ] && command -v setcap >/dev/null 2>&1; then
-  setcap cap_net_raw+ep /usr/bin/ping || true
-fi
 
 # Seed fake-hwclock so first boot isn't 1970
 date -u '+%Y-%m-%d %H:%M:%S' > /etc/fake-hwclock.data
@@ -166,9 +120,6 @@ enable_unit fake-hwclock.service
 enable_unit chrony.service
 
 echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /etc/rootfs-build-info
-
-apt-get clean
-rm -rf /var/lib/apt/lists/*
 
 # sanitize for true first boot
 rm -rf /var/lib/cloud
