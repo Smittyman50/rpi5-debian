@@ -12,23 +12,28 @@ network:
   version: 2
   ethernets:
     {{ net.ifname | default('end0') }}:
-{% if net.mode == 'static' %}
+{% if net and (net.mode | default('dhcp')) == 'static' %}
       dhcp4: false
       addresses:
-        - {{ static_ip }}/{{ static_prefix | default(24) }}
-{% if gateway is defined and gateway %}
+        - {{ net.address }}
       routes:
         - to: 0.0.0.0/0
-          via: {{ gateway }}
-{% endif %}
-{% if net.dns is defined and dns_servers %}
+          via: {{ net.gateway }}
+{% if net.dns is defined and net.dns %}
       nameservers:
         addresses:
-{% for ns in dns_servers %}
-          - {{ net.dns }}
+{% for ns in net.dns %}
+          - {{ ns }}
 {% endfor %}
-{% if net.search is defined %}
-        search: {{ net.search }}
+{% if net.search is defined and net.search %}
+{% if net.search is string %}
+        search: [{{ net.search }}]
+{% else %}
+        search:
+{% for s in net.search %}
+          - {{ s }}
+{% endfor %}
+{% endif %}
 {% endif %}
 {% endif %}
 {% else %}
