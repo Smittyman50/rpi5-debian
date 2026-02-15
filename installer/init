@@ -180,12 +180,6 @@ fetch_or_die "${ART}/debian-bookworm-arm64-rootfs.tar.zst" /tmp/rootfs.tar.zst
 log "Extracting rootfs..."
 zstd_cat /tmp/rootfs.tar.zst | tar -xpf - -C /mnt/root || die "Extract rootfs failed"
 
-log "Sanitizing rootfs..."
-rm -rf /mnt/root/var/lib/cloud 2>/dev/null || true
-rm -f  /mnt/root/var/log/cloud-init.log /mnt/root/var/log/cloud-init-output.log 2>/dev/null || true
-rm -f /mnt/root/etc/machine-id /mnt/root/var/lib/dbus/machine-id 2>/dev/null || true
-rm -f /mnt/root/var/lib/systemd/timesync/clock /mnt/root/var/lib/systemd/timesync/clock.* 2>/dev/null || true
-
 log "Fetching Pi firmware bundle..."
 fetch_or_die "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
 log "Installing firmware..."
@@ -204,19 +198,19 @@ if [ -z "${KVER_INSTALLED:-}" ]; then
 fi
 log "Installed kernel modules: $KVER_INSTALLED"
 
-# Cloud-init datasource selection in the installed OS
-mkdir -p /mnt/root/etc/cloud/cloud.cfg.d
-cat > /mnt/root/etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloudNet, None ]
-EOF
+log "Finalizing target for first boot (minimal)..."
 
-cat > /mnt/root/etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
-preserve_hostname: false
-EOF
+# Ensure machine-id regenerates on first NVMe boot (safe even if already absent)
+rm -f /mnt/root/etc/machine-id /mnt/root/var/lib/dbus/machine-id 2>/dev/null || true
+
+# Optional: only clear cloud-init state if present (belt-and-suspenders)
+if [ -d /mnt/root/var/lib/cloud ]; then
+  rm -rf /mnt/root/var/lib/cloud 2>/dev/null || true
+fi
 
 log "Writing NVMe cmdline.txt..."
 cat > /mnt/root/boot/firmware/cmdline.txt <<EOF
-console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud-net;seedfrom=${SEED}/
+console=ttyAMA10,115200 console=tty1 root=PARTUUID=${ROOT_PARTUUID} rootfstype=ext4 fsck.repair=yes rootwait ds=nocloud;s=${SEED}/
 EOF
 
 log "Writing NVMe config.txt..."

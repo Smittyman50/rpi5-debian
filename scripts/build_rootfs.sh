@@ -75,8 +75,7 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # Core packages: keep ifupdown for DHCP bootstrap on first NVMe boot
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo \
-  cloud-init ifupdown \
+  systemd-sysv ca-certificates openssh-server sudo cloud-init ifupdown \
   systemd-resolved fake-hwclock chrony kmod iptables nftables \
   iputils-ping libcap2-bin
 
@@ -107,9 +106,13 @@ enable_unit serial-getty@ttyAMA10.service
 # ---- Cloud-init datasource + networking renderer ----
 mkdir -p /etc/cloud/cloud.cfg.d
 
-# Ensure NoCloudNet is allowed (matches ds=nocloud-net in cmdline)
+# Ensure NoCloud is allowed (matches ds=nocloud in cmdline)
 cat > /etc/cloud/cloud.cfg.d/99-datasource.cfg <<'EOF'
-datasource_list: [ NoCloudNet, None ]
+datasource_list: [ NoCloud ]
+EOF
+
+cat > /etc/cloud/cloud.cfg.d/99-hostname.cfg <<'EOF'
+preserve_hostname: false
 EOF
 
 # Tell cloud-init to use ENI (ifupdown) networking, not netplan
