@@ -144,7 +144,7 @@ for serial, cfg in pis.items():
             f2.write(network_cfg.strip() + "\n")
 
     with open(os.path.join(d, "vendor-data"), "w", encoding="utf-8") as f2:
-        f2.write("#cloud-config\n\{\}\n")
+        f2.write("#cloud-config\n{}\n")
 
 print(f"Rendered seeds to {OUT_BASE}/")
 print(f"Build SHA: {BUILD_SHA} (short={BUILD_SHA_SHORT})")
