@@ -67,7 +67,7 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # Core packages: keep ifupdown for DHCP bootstrap on first NVMe boot
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo cloud-init netplan.io \
+  systemd-sysv ca-certificates openssh-server sudo cloud-init ifupdown \
   fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
 
 apt-get clean

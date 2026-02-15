@@ -2,6 +2,36 @@
 locale: en_US.UTF-8
 timezone: {{ timezone | default("UTC") }}
 
+{% if hostname is defined %}
+hostname: {{ hostname }}
+manage_etc_hosts: true
+{% endif %}
+
+# Networking (cloud-init v2). Debian + ifupdown => renderer 'eni' => /etc/network/interfaces
+network:
+  version: 2
+  ethernets:
+    {{ net_iface | default("end0") }}:
+{% if static_ip is defined and static_ip %}
+      dhcp4: false
+      addresses:
+        - {{ static_ip }}/{{ static_prefix | default(24) }}
+{% if gateway is defined and gateway %}
+      routes:
+        - to: 0.0.0.0/0
+          via: {{ gateway }}
+{% endif %}
+{% if dns_servers is defined and dns_servers %}
+      nameservers:
+        addresses:
+{% for ns in dns_servers %}
+          - {{ ns }}
+{% endfor %}
+{% endif %}
+{% else %}
+      dhcp4: true
+{% endif %}
+
 users:
   - name: {{ username }}
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -64,11 +94,6 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
-  {# --- Apply static ifupdown config from network-config seed --- #}
-  {# network-config is written by cloud-init datasource as /etc/network/interfaces.d/20-static.cfg (see template below) $#}
-  - [ bash, -lc, "set -euo pipefail; test -f /etc/network/interfaces.d/20-static.cfg || { echo 'Missing /etc/network/interfaces.d/20-static.cfg from network-config' | systemd-cat -t cloud-init; exit 1; }" ]
-  - [ bash, -lc, "set -euo pipefail; rm -f /etc/network/interfaces.d/10-end0-dhcp.cfg || true" ]
-  - [ bash, -lc, "set -euo pipefail; systemctl restart networking || (ifdown --force end0 || true; ifup end0 || true)" ]
   - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:

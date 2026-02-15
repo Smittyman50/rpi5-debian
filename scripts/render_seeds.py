@@ -139,10 +139,6 @@ for serial, cfg in pis.items():
     with open(os.path.join(d, "user-data"), "w", encoding="utf-8") as f2:
         f2.write(user.strip() + "\n")
 
-    if network_cfg is not None:
-        with open(os.path.join(d, "network-config"), "w", encoding="utf-8") as f2:
-            f2.write(network_cfg.strip() + "\n")
-
     with open(os.path.join(d, "vendor-data"), "w", encoding="utf-8") as f2:
         f2.write("#cloud-config\n{}\n")
 
