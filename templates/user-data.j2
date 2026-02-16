@@ -98,6 +98,7 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
+  - [ bash, -lc, "set -euo pipefail; sed -i \"/^[[:space:]]*dns[[:space:]]*{.*}$/d\" /etc/network/interfaces.d/50-cloud-init" ]
   - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:

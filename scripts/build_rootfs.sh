@@ -63,17 +63,6 @@ enable_unit() {
   return 0
 }
 
-cat >"/etc/apt/sources.list.d/bookworm-backports.list" <<'EOF'
-deb http://deb.debian.org/debian bookworm-backports main
-EOF
-
-# Pin backports low so only explicitly requested packages come from it
-cat >"/etc/apt/preferences.d/99-backports-default-low" <<'EOF'
-Package: *
-Pin: release a=bookworm-backports
-Pin-Priority: 100
-EOF
-
 apt-get update
 
 # Locale
@@ -84,13 +73,8 @@ update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # Core packages
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo ifupdown \
+  systemd-sysv ca-certificates openssh-server sudo cloud-init ifupdown \
   fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
-
-apt-get -y -t bookworm-backports install cloud-init
-
-apt-cache policy cloud-init
-cloud-init --version || true
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
