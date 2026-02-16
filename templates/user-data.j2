@@ -68,9 +68,9 @@ packages:
 {% endfor %}
 {% if docker | default(false) %}
   - gnupg
-{% endif %}
-
 {% if roles %}
+  - ansible
+
 write_files:
   - path: /etc/docker-roles.yml
     permissions: "0644"
@@ -94,9 +94,7 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ]
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
   - [ bash, -lc, "set -euo pipefail; usermod -aG docker {{ username }} || true" ]
-{% endif %}
-{% if docker | default(false) and roles %}
-  - [ bash, -lc, "set -euo pipefail; command -v ansible-pull >/dev/null 2>&1 || (apt-get update && apt-get install -y ansible)" ]
+{% if roles %}
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
   - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
