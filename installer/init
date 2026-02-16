@@ -190,7 +190,7 @@ zstd_cat /tmp/rootfs.tar.zst | tar --xattrs --xattrs-include='*' --acls -xpf - -
 log "Fetching Pi firmware bundle..."
 fetch_or_die "${ART}/pi-firmware.tar.zst" /tmp/pi-firmware.tar.zst
 log "Installing firmware..."
-zstd_cat /tmp/pi-firmware.tar.zst | tar --xattrs --xattrs-include='*' --acls -xpf - -C /mnt/root/boot/firmware \
+zstd_cat /tmp/pi-firmware.tar.zst | tar -xpf - -C /mnt/root/boot/firmware \
   || die "Extract firmware failed"
 
 log "Fetching Pi kernel modules bundle..."

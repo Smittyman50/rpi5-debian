@@ -74,7 +74,7 @@ if [[ "$want_boot" -eq 1 ]]; then
     exit 1
   }
 
-  tar --xattrs --acls --numeric-owner -C "$FW_BOOT" -cpf - \
+  tar -C "$FW_BOOT" -cpf - \
     start4.elf fixup4.dat kernel_2712.img bcm2712-rpi-5-b.dtb overlays \
     | zstd -19 -T0 -o dist/artifacts/pi-firmware.tar.zst
 
