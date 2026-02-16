@@ -47,8 +47,6 @@ export DEBIAN_FRONTEND=noninteractive
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
-apt-get update
-
 # Enable services (prefer systemctl; fallback to symlinks)
 enable_unit() {
   u=\"\$1\"
@@ -59,16 +57,35 @@ enable_unit() {
   ln -sf \"/lib/systemd/system/\$u\" \"/etc/systemd/system/multi-user.target.wants/\$u\" || true
 }
 
+apt-get update
+
 # Locale
 apt-get install -y --no-install-recommends locales
 sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
 locale-gen
 update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
-# Core packages: keep ifupdown for DHCP bootstrap on first NVMe boot
+# Core packages
 apt-get install -y --no-install-recommends \
-  systemd-sysv ca-certificates openssh-server sudo cloud-init ifupdown \
+  systemd-sysv ca-certificates openssh-server sudo ifupdown \
   fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
+
+cat >"/etc/apt/sources.list.d/bookworm-backports.list" <<'EOF'
+deb http://deb.debian.org/debian bookworm-backports main
+EOF
+
+# Pin backports low so only explicitly requested packages come from it
+cat >"/etc/apt/preferences.d/99-backports-default-low" <<'EOF'
+Package: *
+Pin: release a=bookworm-backports
+Pin-Priority: 100
+EOF
+
+apt-get update
+apt-get -y -t bookworm-backports install cloud-init
+
+apt-cache policy cloud-init
+cloud-init --version || true
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
