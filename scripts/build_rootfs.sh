@@ -49,13 +49,30 @@ export LC_ALL=C.UTF-8
 
 # Enable services (prefer systemctl; fallback to symlinks)
 enable_unit() {
-  u=\"\$1\"
+  u="$1"
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl enable \"\$u\" >/dev/null 2>&1 && return 0
+    systemctl enable "$u" >/dev/null 2>&1 && return 0
   fi
   mkdir -p /etc/systemd/system/multi-user.target.wants
-  ln -sf \"/lib/systemd/system/\$u\" \"/etc/systemd/system/multi-user.target.wants/\$u\" || true
+  for p in "/lib/systemd/system/$u" "/usr/lib/systemd/system/$u"; do
+    if [ -e "$p" ]; then
+      ln -sf "$p" "/etc/systemd/system/multi-user.target.wants/$u" || true
+      return 0
+    fi
+  done
+  return 0
 }
+
+cat >"/etc/apt/sources.list.d/bookworm-backports.list" <<'EOF'
+deb http://deb.debian.org/debian bookworm-backports main
+EOF
+
+# Pin backports low so only explicitly requested packages come from it
+cat >"/etc/apt/preferences.d/99-backports-default-low" <<'EOF'
+Package: *
+Pin: release a=bookworm-backports
+Pin-Priority: 100
+EOF
 
 apt-get update
 
@@ -70,18 +87,6 @@ apt-get install -y --no-install-recommends \
   systemd-sysv ca-certificates openssh-server sudo ifupdown \
   fake-hwclock chrony kmod iptables nftables iputils-ping libcap2-bin
 
-cat >"/etc/apt/sources.list.d/bookworm-backports.list" <<'EOF'
-deb http://deb.debian.org/debian bookworm-backports main
-EOF
-
-# Pin backports low so only explicitly requested packages come from it
-cat >"/etc/apt/preferences.d/99-backports-default-low" <<'EOF'
-Package: *
-Pin: release a=bookworm-backports
-Pin-Priority: 100
-EOF
-
-apt-get update
 apt-get -y -t bookworm-backports install cloud-init
 
 apt-cache policy cloud-init
