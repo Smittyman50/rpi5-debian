@@ -98,6 +98,7 @@ runcmd:
 {% if roles %}
   - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
 {% endif %}
+{% endif %}
   - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]
 
 power_state:
