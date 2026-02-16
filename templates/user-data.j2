@@ -80,6 +80,7 @@ write_files:
         - {{ r }}
 {% endfor %}
 {% endif %}
+{% endif %}
 
 runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now ssh || true" ]
