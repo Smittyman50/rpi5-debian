@@ -15,9 +15,7 @@ network:
       dhcp4: false
       addresses:
         - {{ net.address }}
-      routes:
-        - to: 0.0.0.0/0
-          via: {{ net.gateway }}
+      gateway4: {{ net.gateway }}
 {% if net.dns is defined and net.dns %}
       nameservers:
         addresses:
