@@ -74,7 +74,7 @@ if [[ "$want_boot" -eq 1 ]]; then
     exit 1
   }
 
-  tar -C "$FW_BOOT" -cpf - \
+  tar --xattrs --acls --numeric-owner -C "$FW_BOOT" -cpf - \
     start4.elf fixup4.dat kernel_2712.img bcm2712-rpi-5-b.dtb overlays \
     | zstd -19 -T0 -o dist/artifacts/pi-firmware.tar.zst
 
@@ -107,7 +107,7 @@ if [[ "$want_boot" -eq 1 ]]; then
   }
 
   echo "Using KVER=$KVER"
-  tar -C "$FW_MOD" -cpf - "$KVER" | zstd -19 -T0 -o dist/artifacts/pi-modules.tar.zst
+  tar --xattrs --acls --numeric-owner -C "$FW_MOD" -cpf - "$KVER" | zstd -19 -T0 -o dist/artifacts/pi-modules.tar.zst
 fi
 
 # -----------
