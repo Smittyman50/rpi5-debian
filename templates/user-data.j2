@@ -91,7 +91,6 @@ write_files:
 
 runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now ssh || true" ]
-  - [ bash, -lc, "set -euo pipefail; apt-get update && apt-get install -y --no-install-recommends ca-certificates" ]
   - [ bash, -lc, "set -euo pipefail; update-ca-certificates" ]
 {% if docker | default(false) %}
   - [ bash, -lc, "set -euo pipefail; install -m 0755 -d /etc/apt/keyrings" ]
