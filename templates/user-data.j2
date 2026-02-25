@@ -76,7 +76,7 @@ packages:
 write_files:
   - path: /usr/local/share/ca-certificates/step-ca-root.crt
     owner: root:root
-    permissions: '0644'
+    permissions: "0644"
     content: |
 {{ lookup('file', 'files/step-ca-root.crt') | indent(6, true) }}
 {% if roles %}
