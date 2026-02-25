@@ -3,11 +3,44 @@ import os
 import subprocess
 import yaml
 
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 TEMPLATES_DIR = "templates"
 INVENTORY_FILE = "inventory/pis.yml"
 OUT_BASE = "out/seeds"
+
+# Base directory for resolving "lookup('file', ...)" paths
+# Uses repo root (cwd) by default; override with LOOKUP_BASE_DIR if desired.
+LOOKUP_BASE_DIR = Path(os.environ.get("LOOKUP_BASE_DIR", ".")).resolve()
+
+def lookup(kind: str, path: str) -> str:
+    """
+    Minimal Ansible-like lookup() for plain Jinja2.
+
+    Supports:
+      - lookup('file', 'relative/or/absolute/path')
+
+    Behavior:
+      - Relative paths resolve against LOOKUP_BASE_DIR (default: repo root / cwd)
+      - Returns UTF-8 text with a trailing newline (like Ansible file lookup tends to be used)
+      - Raises FileNotFoundError / ValueError on errors (fails fast with StrictUndefined elsewhere)
+    """
+    if kind != "file":
+        raise ValueError(f"lookup(kind={kind!r}) unsupported; only 'file' is implemented")
+
+    p = Path(path)
+    if not p.is_absolute():
+        p = (LOOKUP_BASE_DIR / p).resolve()
+
+    if not p.exists() or not p.is_file():
+        raise FileNotFoundError(f"lookup('file', {path!r}) not found: {p}")
+
+    # Preserve contents exactly, but ensure trailing newline so YAML block scalars behave nicely.
+    text = p.read_text(encoding="utf-8")
+    if not text.endswith("\n"):
+        text += "\n"
+    return text
 
 env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
@@ -16,6 +49,9 @@ env = Environment(
     lstrip_blocks=True,
     undefined=StrictUndefined,  # fail fast if a variable is missing/misspelled
 )
+
+# Register lookup() as a global so templates can call: {{ lookup('file', '...') }}
+env.globals["lookup"] = lookup
 
 t_user = env.get_template("user-data.j2")
 t_meta = env.get_template("meta-data.j2")
