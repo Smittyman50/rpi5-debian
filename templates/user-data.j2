@@ -78,7 +78,7 @@ write_files:
     owner: root:root
     permissions: '0644'
     content: |
-    {{ lookup('file', 'files/step-ca-root.crt') | indent(6, true) }}
+{{ lookup('file', 'files/step-ca-root.crt') | indent(6, true) }}
 {% if roles %}
   - path: /etc/docker-roles.yml
     permissions: "0644"
