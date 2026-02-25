@@ -70,8 +70,17 @@ packages:
   - gnupg
 {% if roles %}
   - ansible
+{% endif %}
+{% endif %}
 
 write_files:
+  - path: /usr/local/share/ca-certificates/step-ca-root.crt
+    owner: root:root
+    permissions: '0644'
+    content: |
+    {{ lookup('file', 'files/step-ca-root.crt') | indent(6, true) }}
+
+{% if roles %}
   - path: /etc/docker-roles.yml
     permissions: "0644"
     content: |
@@ -79,7 +88,6 @@ write_files:
 {% for r in roles %}
         - {{ r }}
 {% endfor %}
-{% endif %}
 {% endif %}
 
 runcmd:
