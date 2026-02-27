@@ -18,7 +18,7 @@ pis:
     docker: true
     roles: ["dns", "dhcp"]
 
-   "fad10590617925e2":
+  "fad10590617925e2":
     hostname: "uatu"
     net:
       ifname: end0
