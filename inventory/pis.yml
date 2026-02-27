@@ -35,7 +35,7 @@ pis:
     packages: [unattended-upgrades]
     timezone: "America/New_York"
     docker: true
-    roles: ["netflow"]
+    roles: ["netflow", "netmon"]
 
   "2c8deee2f42ae21c":
     hostname: "hades"
