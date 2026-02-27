@@ -17,7 +17,26 @@ pis:
     timezone: "America/New_York"
     docker: true
     roles: ["dns", "dhcp"]
-  
+
+   "fad10590617925e2":
+    hostname: "uatu"
+    net:
+      ifname: end0
+      mode: static
+      address: 192.168.3.28/24
+      gateway: 192.168.3.1
+      dns: [192.168.3.3, 1.1.1.1, 8.8.8.8]
+      search: [home.arpa]
+    username: "smittyman"
+    passwd_hash: "***REMOVED***"
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINXdpbaJuNTaMFItt4F2FYW0eD3HQ1yw864KlNLK83AN 1973m@Computron"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKqYo8kJuQDH1CWZ+gUbVA6Dl8rH/D1lEdggE8deaGIk smittyman@home.arpa"
+    packages: [unattended-upgrades]
+    timezone: "America/New_York"
+    docker: true
+    roles: ["netflow"]
+
   "2c8deee2f42ae21c":
     hostname: "hades"
     net:
