@@ -9,7 +9,6 @@ pis:
       dns: [192.168.3.3, 1.1.1.1, 8.8.8.8]
       search: [home.arpa]
     username: "smittyman"
-    passwd_hash: "***REMOVED***"
     ssh_authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINXdpbaJuNTaMFItt4F2FYW0eD3HQ1yw864KlNLK83AN 1973m@Computron"
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKqYo8kJuQDH1CWZ+gUbVA6Dl8rH/D1lEdggE8deaGIk smittyman@home.arpa"
@@ -28,7 +27,6 @@ pis:
       dns: [192.168.3.3, 1.1.1.1, 8.8.8.8]
       search: [home.arpa]
     username: "smittyman"
-    passwd_hash: "***REMOVED***"
     ssh_authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINXdpbaJuNTaMFItt4F2FYW0eD3HQ1yw864KlNLK83AN 1973m@Computron"
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKqYo8kJuQDH1CWZ+gUbVA6Dl8rH/D1lEdggE8deaGIk smittyman@home.arpa"
@@ -47,7 +45,6 @@ pis:
       dns: [192.168.3.3, 1.1.1.1, 8.8.8.8]
       search: [home.arpa]
     username: "smittyman"
-    passwd_hash: "***REMOVED***"
     ssh_authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINXdpbaJuNTaMFItt4F2FYW0eD3HQ1yw864KlNLK83AN 1973m@Computron"
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKqYo8kJuQDH1CWZ+gUbVA6Dl8rH/D1lEdggE8deaGIk smittyman@home.arpa"
