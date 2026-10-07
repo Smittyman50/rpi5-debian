@@ -143,6 +143,11 @@ def normalize_net(cfg: dict) -> dict | None:
     return net
 
 def main() -> int:
+    passwd_hash = os.environ.get("PI_PASSWD_HASH", "").strip()
+
+    if not passwd_hash:
+        raise ValueError("PI_PASSWD_HASH environment variable is required")
+
     with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
         inv = yaml.safe_load(f) or {}
 
@@ -180,7 +185,7 @@ def main() -> int:
             # make hostname available to user-data.j2 if you want to set it there too
             hostname=cfg["hostname"],
             username=cfg.get("username", "smittyman"),
-            passwd_hash=cfg.get("passwd_hash", ""),
+            passwd_hash=passwd_hash,
             docker=bool(cfg.get("docker", False)),
             roles=cfg.get("roles", []) or [],
             ssh_authorized_keys=cfg.get("ssh_authorized_keys", []) or [],
