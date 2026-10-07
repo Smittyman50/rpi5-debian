@@ -93,7 +93,7 @@ jobs:
       - name: Install MinIO client (mc)
         run: |
           set -euo pipefail
-          curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /tmp/mc
+          curl -fsSL https://dl.min.io/aistor/mc/release/linux-amd64/mc -o /tmp/mc
           install -m 0755 /tmp/mc /usr/local/bin/mc
           mc --version
 
