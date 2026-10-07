@@ -39,6 +39,8 @@ jobs:
           pip3 install --break-system-packages pyyaml jinja2
 
       - name: Render per-Pi cloud-init seeds
+        env:
+          PI_PASSWD_HASH: ${{ secrets.PI_PASSWD_HASH }}
         run: |
           set -euo pipefail
           chmod +x scripts/render_seeds.py
