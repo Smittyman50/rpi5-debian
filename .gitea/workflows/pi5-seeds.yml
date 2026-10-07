@@ -62,3 +62,4 @@ jobs:
           rsync -avz --delete -e "ssh -i /tmp/ironhide.key -o StrictHostKeyChecking=no" \
             dist/seeds/ \
             "${IRONHIDE_SSH_USER}@${IRONHIDE_SSH_HOST}:${IRONHIDE_SEEDS_DIR}/"
+          rm -f /tmp/ironhide.key
