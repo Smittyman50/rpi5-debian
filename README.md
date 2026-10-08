@@ -22,6 +22,31 @@ The end-to-end flow is:
 
 The boot artifacts and per-device seeds have separate CI workflows. This allows inventory or template changes to be deployed without rebuilding the kernel, root filesystem, or installer.
 
+### Architecture flow
+
+```mermaid
+flowchart TD
+    source[Repository source]
+
+    source --> boot_trigger[Scheduled or manual boot workflow]
+    boot_trigger --> boot_build[Build firmware, rootfs, initramfs, and boot image]
+    boot_build --> boot_sign[Sign boot image]
+    boot_sign --> minio[Publish latest and immutable builds to MinIO]
+    minio --> http_boot[HTTP boot service]
+
+    source --> seed_trigger[Seed-related push or manual seed workflow]
+    gitea_secret[Gitea PI_PASSWD_HASH secret] --> seed_render[Render per-Pi cloud-init seeds]
+    seed_trigger --> seed_render
+    seed_render --> seed_stage[Stage seed payload]
+    seed_stage --> seed_server[Deploy seeds to ironhide with rsync]
+
+    http_boot --> pi_installer[Pi boots installer into RAM]
+    pi_installer --> nvme[Partition NVMe and install Debian]
+    nvme --> first_boot[Reboot into installed system]
+    first_boot --> cloud_init[Cloud-init applies per-device configuration]
+    seed_server --> cloud_init
+```
+
 ## Repository layout
 
 ```text
@@ -98,7 +123,6 @@ The script requires a Debian/Ubuntu-style Linux build host with root privileges,
 | --- | --- | --- |
 | `hostname` | Required machine hostname | none |
 | `username` | Administrative user | `smittyman` |
-| `passwd_hash` | Crypt-format password hash | empty |
 | `ssh_authorized_keys` | SSH public keys for the user | `[]` |
 | `timezone` | System timezone | `UTC` |
 | `packages` | Additional apt packages | `[]` |
@@ -115,8 +139,10 @@ Render seeds from the repository root with:
 
 ```bash
 python3 -m pip install pyyaml jinja2
-python3 scripts/render_seeds.py
+PI_PASSWD_HASH='<crypt-format-password-hash>' python3 scripts/render_seeds.py
 ```
+
+`PI_PASSWD_HASH` is required when rendering seeds. In CI, `.gitea/workflows/pi5-seeds.yml` reads it from the Gitea repository secret named `PI_PASSWD_HASH`; it is not stored in `inventory/pis.yml`.
 
 This writes the following files for every inventory serial:
 
@@ -140,7 +166,7 @@ sudo bash scripts/patch_pi5_dtb.sh
 bash scripts/build_rootfs.sh
 HTTP_BASE=http://your-server/rpi/httpboot bash scripts/build_installer_initramfs.sh
 bash scripts/build_boot_img.sh
-python3 scripts/render_seeds.py
+PI_PASSWD_HASH='<crypt-format-password-hash>' python3 scripts/render_seeds.py
 PUBLISH_MODE=all bash scripts/publish.sh
 ```
 
@@ -188,11 +214,11 @@ dist/
 
 `.gitea/workflows/pi5-httpboot-kernel.yml` runs manually or every Sunday at 08:00 UTC. It builds the firmware, rootfs, installer, and boot image; signs the boot image with the `RPI_HTTPBOOT_PRIVATE_PEM` secret; publishes both a stable `latest/` tree and an immutable timestamp/SHA tree to MinIO; writes `latest.json`; and retains the six newest immutable builds.
 
-`.gitea/workflows/pi5-seeds.yml` runs manually or when seed-related files change on `main`. It renders only the seed data and uses SSH/rsync to replace the seed tree under `/srv/http/rpi/httpboot/seeds` on `ironhide.home.arpa`. It requires the `ANSIBLE_PRIVATE_KEY` secret.
+`.gitea/workflows/pi5-seeds.yml` runs manually or when seed-related files change on `main`. It renders only the seed data and uses SSH/rsync to replace the seed tree under `/srv/http/rpi/httpboot/seeds` on `ironhide.home.arpa`. It requires the `PI_PASSWD_HASH` and `ANSIBLE_PRIVATE_KEY` Gitea repository secrets.
 
 The boot workflow's MinIO endpoint, bucket, and prefix, and the seed workflow's deployment host and directory, are environment-specific. Publishing to MinIO does not by itself explain how the hard-coded installer HTTP URL is mapped to those objects; the surrounding HTTP service must expose this layout.
 
-## Site-specific settings and security
+## Site-specific settings
 
 Before using this repository elsewhere, review at least:
 
@@ -200,7 +226,6 @@ Before using this repository elsewhere, review at least:
 - the temporary DNS resolver and NTP server addresses;
 - Docker and Ansible repository URLs in `templates/user-data.j2`;
 - MinIO, SSH, and HTTP deployment destinations in `.gitea/workflows/`;
-- the serial numbers, static addresses, usernames, password hashes, and SSH keys in `inventory/pis.yml`; and
+- the serial numbers, static addresses, usernames, and SSH keys in `inventory/pis.yml`;
+- the `PI_PASSWD_HASH` Gitea repository secret used when rendering seeds; and
 - the private trust anchor in `files/step-ca-root.crt`.
-
-Although password hashes and public keys are not plaintext passwords, the inventory is still security-sensitive. Keep the HTTP boot and seed endpoints on a trusted network, protect CI signing and deployment keys as secrets, and restrict write access to published boot artifacts. The installer downloads runtime archives over plain HTTP and does not verify their signatures or checksums; integrity therefore depends on the trusted network and publication path.
