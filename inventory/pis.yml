@@ -69,4 +69,4 @@ pis:
     packages: [unattended-upgrades]
     timezone: "America/New_York"
     docker: true
-    roles: ["graylog", "netmon-agent"]
+    roles: ["graylog", "netmon-agent", "telemetry"]
