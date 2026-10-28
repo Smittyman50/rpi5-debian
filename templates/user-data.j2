@@ -88,6 +88,11 @@ write_files:
 {% for r in roles %}
         - {{ r }}
 {% endfor %}
+  - path: /etc/ansible/vault_password
+    owner: root:root
+    permissions: "0600"
+    encoding: b64
+    content: {{ vault_password_b64 }}
 {% endif %}
 
 runcmd:
@@ -105,7 +110,7 @@ runcmd:
   - [ bash, -lc, "set -euo pipefail; systemctl enable --now docker" ]
   - [ bash, -lc, "set -euo pipefail; usermod -aG docker {{ username }} || true" ]
 {% if roles %}
-  - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml site.yml || true" ]
+  - [ bash, -lc, "set -euo pipefail; ansible-pull -U http://gitgard.home.arpa:3000/smittyman/docker-role-deploy.git -i localhost, -c local -e @/etc/docker-roles.yml --vault-password-file /etc/ansible/vault_password site.yml || true" ]
 {% endif %}
 {% endif %}
   - [ bash, -lc, "set -euo pipefail; echo 'Provisioned via cloud-init' > /etc/provisioned.txt" ]

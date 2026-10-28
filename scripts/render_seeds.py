@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import base64
 import os
 import subprocess
 import yaml
@@ -148,6 +149,13 @@ def main() -> int:
     if not passwd_hash:
         raise ValueError("PI_PASSWD_HASH environment variable is required")
 
+    # Vault password for ansible-pull; base64-encoded so any characters survive YAML.
+    # Strip only the trailing newline, not surrounding whitespace that may be part of the password.
+    vault_password = os.environ.get("ANSIBLE_VAULT_PASSWORD", "").rstrip("\r\n")
+    vault_password_b64 = (
+        base64.b64encode(vault_password.encode("utf-8")).decode("ascii") if vault_password else ""
+    )
+
     with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
         inv = yaml.safe_load(f) or {}
 
@@ -172,6 +180,12 @@ def main() -> int:
 
         net = normalize_net(cfg)
 
+        roles = cfg.get("roles", []) or []
+        if roles and not vault_password_b64:
+            raise ValueError(
+                f"{serial}: ANSIBLE_VAULT_PASSWORD environment variable is required for hosts with roles"
+            )
+
         # Deterministic instance-id per build: serial + git SHA
         instance_id = f"{serial}-{build_sha_short}"
 
@@ -187,7 +201,8 @@ def main() -> int:
             username=cfg.get("username", "smittyman"),
             passwd_hash=passwd_hash,
             docker=bool(cfg.get("docker", False)),
-            roles=cfg.get("roles", []) or [],
+            roles=roles,
+            vault_password_b64=vault_password_b64,
             ssh_authorized_keys=cfg.get("ssh_authorized_keys", []) or [],
             packages=cfg.get("packages", []) or [],
             timezone=cfg.get("timezone", "UTC"),

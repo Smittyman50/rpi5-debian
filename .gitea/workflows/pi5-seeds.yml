@@ -41,6 +41,7 @@ jobs:
       - name: Render per-Pi cloud-init seeds
         env:
           PI_PASSWD_HASH: ${{ secrets.PI_PASSWD_HASH }}
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x scripts/render_seeds.py
